@@ -1,0 +1,147 @@
+---
+title: Change Tracking
+description: Detect new, changed, unchanged, and removed pages between crawl runs.
+---
+
+The `ChangeTracker` compares crawl results across runs by hashing content and detecting differences. It stores snapshots in SQLite and generates text diffs for changed pages.
+
+## Quick Start
+
+```typescript
+import { WebCrawler, ChangeTracker, CacheMode } from "feedstock";
+
+const crawler = new WebCrawler();
+const tracker = new ChangeTracker();
+
+// First crawl
+const results = await crawler.deepCrawl("https://example.com", {
+  cacheMode: CacheMode.Bypass,
+}, { maxDepth: 2, maxPages: 50 });
+
+const report = tracker.compare(results);
+console.log(report.summary);
+// { total: 50, new: 50, changed: 0, unchanged: 0, removed: 0 }
+
+// ... time passes, content changes ...
+
+// Second crawl
+const results2 = await crawler.deepCrawl("https://example.com", {
+  cacheMode: CacheMode.Bypass,
+}, { maxDepth: 2, maxPages: 50 });
+
+const report2 = tracker.compare(results2);
+console.log(report2.summary);
+// { total: 53, new: 3, changed: 5, unchanged: 42, removed: 0 }
+
+tracker.close();
+await crawler.close();
+```
+
+## Change Statuses
+
+| Status | Meaning |
+|--------|---------|
+| `new` | URL exists now but not in previous snapshot |
+| `changed` | URL exists in both but content hash differs |
+| `unchanged` | URL exists in both with identical content |
+| `removed` | URL was in previous snapshot but not current |
+
+## Change Report
+
+```typescript
+interface ChangeReport {
+  snapshotId: string;
+  previousSnapshotId: string | null;
+  timestamp: number;
+  summary: {
+    total: number;
+    new: number;
+    changed: number;
+    unchanged: number;
+    removed: number;
+  };
+  changes: PageChange[];
+}
+```
+
+## Working with Changes
+
+```typescript
+// Filter by status
+const newPages = report.changes.filter(c => c.status === "new");
+const changed = report.changes.filter(c => c.status === "changed");
+const removed = report.changes.filter(c => c.status === "removed");
+
+// Inspect a change
+for (const change of changed) {
+  console.log(`${change.url} changed`);
+  console.log(`  Title: "${change.previousTitle}" → "${change.currentTitle}"`);
+  
+  if (change.diff) {
+    console.log(`  +${change.diff.additions} -${change.diff.deletions} lines`);
+    for (const chunk of change.diff.chunks) {
+      const prefix = chunk.type === "add" ? "+" : chunk.type === "remove" ? "-" : " ";
+      for (const line of chunk.lines) {
+        console.log(`  ${prefix} ${line}`);
+      }
+    }
+  }
+}
+```
+
+## Text Diffs
+
+Changed pages include a line-by-line diff:
+
+```typescript
+interface TextDiff {
+  additions: number;    // lines added
+  deletions: number;    // lines removed
+  chunks: DiffChunk[];  // grouped changes
+}
+
+interface DiffChunk {
+  type: "add" | "remove" | "context";
+  lines: string[];
+}
+```
+
+By default, diffs are computed on markdown content. Set `diffMarkdown: false` to diff cleaned HTML instead.
+
+## Configuration
+
+```typescript
+const tracker = new ChangeTracker({
+  dbPath: "/path/to/changes.db",  // default: ~/.feedstock/changes.db
+  config: {
+    includeDiffs: true,    // generate text diffs (default: true)
+    diffMarkdown: true,    // diff markdown vs HTML (default: true)
+    maxDiffChunks: 50,     // limit diff output (default: 50)
+  },
+});
+```
+
+## Snapshot Management
+
+```typescript
+// List all snapshots
+const snapshots = tracker.listSnapshots();
+// [{ id: "snap_1234", pageCount: 50, createdAt: 1712534400000 }]
+
+// Delete a specific snapshot
+tracker.deleteSnapshot("snap_1234");
+
+// Prune snapshots older than 7 days
+const removed = tracker.pruneOlderThan(7 * 24 * 60 * 60 * 1000);
+console.log(`Removed ${removed} old entries`);
+```
+
+## Custom Snapshot IDs
+
+```typescript
+// Use custom IDs for meaningful tracking
+tracker.compare(results, "prod-2024-04-07");
+tracker.compare(results, "prod-2024-04-08");
+```
+
+Default: `snap_{timestamp}` if no ID provided.
