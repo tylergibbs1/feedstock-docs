@@ -3,6 +3,64 @@ title: Changelog
 description: Release history for feedstock
 ---
 
+## v0.1.2
+
+**Change tracking and dogfood validation**
+
+- **Change tracking** — `ChangeTracker` detects new/changed/unchanged/removed pages between crawl runs using SHA-256 content hashing and LCS-based text diffing
+- Snapshot management: `listSnapshots()`, `deleteSnapshot()`, `pruneOlderThan()`
+- Text diffs with addition/deletion counts and grouped chunks
+- Configurable: diff markdown vs HTML, max diff chunks, custom DB path
+- 115 dogfood checks against real websites (example.com, Hacker News, Wikipedia)
+
+---
+
+## v0.1.1
+
+**Agent-browser features and fetch-first engine system**
+
+### Engine System
+- **Fetch-first architecture** — `FetchEngine` (HTTP) tried before `PlaywrightEngine` (browser)
+- Auto-escalation: detects SPA shells (React, Next.js, Nuxt) and switches to browser
+- `EngineManager` with quality-scored engine selection and fallback chain
+- `likelyNeedsJavaScript()` heuristic for SPA detection
+
+### Accessibility Snapshots
+- `buildStaticSnapshot()` — Cheerio-based semantic tree extraction (works with any engine)
+- `takeSnapshot()` — CDP-based `Accessibility.getFullAXTree` for browser-precise trees
+- Node categorization: interactive (button, link, input), content (heading, paragraph, img), structural (filtered)
+- `@e` ref system for deterministic element identification
+- New `snapshot` field on `CrawlResult`, enabled via `config.snapshot = true`
+
+### Rich Metadata (50+ fields)
+- Full Open Graph (12 fields), Twitter Card (7), Dublin Core (7), Article (5)
+- JSON-LD parsing, favicons, RSS/Atom feeds, alternate hreflang links
+- Charset, viewport, theme-color, robots, referrer, generator
+- Null values auto-stripped for cleaner output
+
+### Filter Denial Reasons
+- `applyWithReason()` on every filter returns `{ allowed, reason, filter }`
+- Specific reasons: "Domain X is blocked", "Matched exclude pattern: Y", "File extension .pdf is blocked"
+- `FilterChain.getDenials()` and `getDenialsByFilter()` for aggregate tracking
+- Fully backward compatible — `apply()` still returns boolean
+
+### Browser Utilities
+- **Interactive element detection** — `detectInteractiveElements()` finds all clickable elements via single JS evaluation (cursor:pointer, onclick, tabindex, ARIA roles)
+- **Iframe content inlining** — `extractIframeContent()` + `inlineIframeContent()`
+- **Storage state persistence** — `saveStorageState()` / `loadStorageState()` for cookies + localStorage
+
+### AI-Friendly Errors
+- `toFriendlyError()` converts 20+ error patterns (DNS, timeout, SSL, element interaction, browser crashes) into actionable messages
+- `withFriendlyErrors()` wrapper for any async operation
+- Auto-applied in `crawler.crawl()` error handler
+
+### Testing
+- 277 unit/integration tests (up from 191)
+- 115 dogfood checks against real websites
+- Battle tests: engine fallback, redirects, timeouts, 404s, cache modes, screenshots, custom JS, network capture
+
+---
+
 ## v0.1.0
 
 **Initial release — full-featured web crawler for TypeScript/Bun**
