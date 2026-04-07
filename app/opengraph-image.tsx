@@ -15,55 +15,24 @@ export default function OGImage() {
 				flexDirection: "column",
 				alignItems: "center",
 				justifyContent: "center",
-				background: "#111827",
+				background: "#0F1219",
 				fontFamily: "Inter, -apple-system, sans-serif",
 			}}
 		>
 			<svg viewBox="0 0 40 40" width={120} height={120}>
-				<circle
-					cx="20"
-					cy="20"
-					r="8"
-					fill="none"
-					stroke="#E0E7FF"
-					stroke-width="3"
-				/>
-				<line
-					x1="20"
-					y1="8"
-					x2="20"
-					y2="4"
-					stroke="#E0E7FF"
-					stroke-width="3"
-					stroke-linecap="round"
-				/>
-				<line
-					x1="20"
-					y1="36"
-					x2="20"
-					y2="32"
-					stroke="#E0E7FF"
-					stroke-width="3"
-					stroke-linecap="round"
-				/>
-				<line
-					x1="8"
-					y1="20"
-					x2="4"
-					y2="20"
-					stroke="#E0E7FF"
-					stroke-width="3"
-					stroke-linecap="round"
-				/>
-				<line
-					x1="36"
-					y1="20"
-					x2="32"
-					y2="20"
-					stroke="#E0E7FF"
-					stroke-width="3"
-					stroke-linecap="round"
-				/>
+				<circle cx="20" cy="20" r="6" fill="#6C8CFF" />
+				<line x1="20" y1="12" x2="20" y2="4" stroke="#6C8CFF" stroke-width="2.5" stroke-linecap="round" />
+				<circle cx="20" cy="3" r="2" fill="#6C8CFF" />
+				<line x1="20" y1="28" x2="20" y2="36" stroke="#6C8CFF" stroke-width="2.5" stroke-linecap="round" />
+				<circle cx="20" cy="37" r="2" fill="#6C8CFF" />
+				<line x1="12" y1="20" x2="4" y2="20" stroke="#6C8CFF" stroke-width="2.5" stroke-linecap="round" />
+				<circle cx="3" cy="20" r="2" fill="#6C8CFF" />
+				<line x1="28" y1="20" x2="36" y2="20" stroke="#6C8CFF" stroke-width="2.5" stroke-linecap="round" />
+				<circle cx="37" cy="20" r="2" fill="#6C8CFF" />
+				<line x1="25" y1="15" x2="31" y2="9" stroke="#6C8CFF" stroke-width="2" stroke-linecap="round" opacity="0.5" />
+				<circle cx="32.5" cy="7.5" r="1.5" fill="#6C8CFF" opacity="0.5" />
+				<line x1="15" y1="25" x2="9" y2="31" stroke="#6C8CFF" stroke-width="2" stroke-linecap="round" opacity="0.5" />
+				<circle cx="7.5" cy="32.5" r="1.5" fill="#6C8CFF" opacity="0.5" />
 			</svg>
 			<div
 				style={{
