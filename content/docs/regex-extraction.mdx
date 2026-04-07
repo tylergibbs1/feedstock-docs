@@ -1,0 +1,65 @@
+---
+title: Regex Extraction
+description: Extract data from HTML using regular expression patterns.
+---
+
+The `RegexExtractionStrategy` applies regex patterns to HTML content, returning all matches with capture groups.
+
+## Basic Usage
+
+```typescript
+const result = await crawler.crawl("https://example.com", {
+  extractionStrategy: {
+    type: "regex",
+    params: {
+      patterns: [/\$\d+\.\d{2}/g],
+    },
+  },
+});
+
+const prices = JSON.parse(result.extractedContent!);
+// [{ index: 0, content: "$9.99", metadata: { fullMatch: "$9.99", groups: {}, captures: [] } }]
+```
+
+## Named Capture Groups
+
+```typescript
+import { RegexExtractionStrategy } from "feedstock";
+
+const strategy = new RegexExtractionStrategy([
+  /(?<currency>\$|EUR|GBP)(?<amount>\d+(?:\.\d{2})?)/g,
+]);
+
+const items = await strategy.extract(url, html);
+// items[0].metadata.groups = { currency: "$", amount: "9.99" }
+```
+
+## Multiple Patterns
+
+```typescript
+const strategy = new RegexExtractionStrategy([
+  /\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z]{2,}\b/gi,  // emails
+  /\b\d{3}[-.]?\d{3}[-.]?\d{4}\b/g,                       // phone numbers
+  /https?:\/\/[^\s<>"]+/g,                                  // URLs
+]);
+```
+
+## Result Structure
+
+Each match returns:
+
+```typescript
+{
+  index: number;           // Sequential index
+  content: string;         // Full match text
+  metadata: {
+    fullMatch: string;     // Same as content
+    groups: Record<string, string>;  // Named capture groups
+    captures: string[];    // Positional captures
+  }
+}
+```
+
+<Callout type="info">
+Patterns should use the `g` (global) flag to find all matches. Without it, only the first match is returned.
+</Callout>

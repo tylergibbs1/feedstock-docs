@@ -1,0 +1,99 @@
+---
+title: Content Scraping
+description: How feedstock cleans HTML and extracts links, media, and metadata.
+---
+
+After fetching a page, feedstock runs it through a `ContentScrapingStrategy` that cleans the HTML and extracts structured data.
+
+## Default Strategy
+
+The built-in `CheerioScrapingStrategy` uses [Cheerio](https://cheerio.js.org/) (fast HTML parser) to:
+
+1. **Clean HTML** — remove `<script>`, `<style>`, `<noscript>`, `<svg>`, `<iframe>`, comments
+2. **Extract links** — classify into internal vs. external with resolved URLs
+3. **Extract media** — images, videos, audio with alt text, dimensions, scoring
+4. **Extract metadata** — title, description, keywords, OG tags, canonical URL
+
+## HTML Cleaning
+
+```typescript
+import { cleanHtml } from "feedstock";
+
+const cleaned = cleanHtml(rawHtml, {
+  excludeTags: ["nav", "footer", "aside"],
+  includeTags: ["article"],     // only keep these (overrides excludeTags)
+  cssSelector: ".main-content", // extract only matching elements
+});
+```
+
+Noise tags are always removed: `script`, `style`, `noscript`, `svg`, `path`, `iframe`, `head`.
+
+## Link Extraction
+
+Links are automatically classified as internal or external based on domain matching:
+
+```typescript
+import { extractLinks } from "feedstock";
+
+const { internal, external } = extractLinks(html, "https://example.com");
+
+// Each link has: href, text, title, baseDomain
+internal.forEach(link => {
+  console.log(`${link.text} -> ${link.href}`);
+});
+```
+
+- Relative URLs are resolved against the base URL
+- Fragment-only links (`#section`) are excluded
+- `javascript:` and `mailto:` links are excluded
+
+## Media Extraction
+
+```typescript
+import { extractMedia } from "feedstock";
+
+const { images, videos, audios } = extractMedia(html, "https://example.com");
+
+images.forEach(img => {
+  console.log(`${img.src} (${img.format}, ${img.width}px) score=${img.score}`);
+});
+```
+
+Images are scored based on:
+- Alt text presence (+3)
+- Width > 100px (+2)
+- Width > 300px (+3)
+
+## Metadata Extraction
+
+```typescript
+import { extractMetadata } from "feedstock";
+
+const meta = extractMetadata(html);
+// { title, description, keywords, ogTitle, ogImage, canonical, language }
+```
+
+## Custom Scraping Strategy
+
+Implement `ContentScrapingStrategy` to replace the default:
+
+```typescript
+import { ContentScrapingStrategy, type ScrapingResult } from "feedstock";
+
+class MyScrapingStrategy extends ContentScrapingStrategy {
+  scrape(url: string, html: string, config: CrawlerRunConfig): ScrapingResult {
+    // Your custom scraping logic
+    return {
+      cleanedHtml: "...",
+      success: true,
+      media: { images: [], videos: [], audios: [] },
+      links: { internal: [], external: [] },
+      metadata: {},
+    };
+  }
+}
+
+const crawler = new WebCrawler({
+  scrapingStrategy: new MyScrapingStrategy(),
+});
+```

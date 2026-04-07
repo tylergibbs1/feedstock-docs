@@ -1,0 +1,66 @@
+---
+title: Hooks
+description: Inject custom behavior at key points in the crawl lifecycle.
+---
+
+Hooks let you run custom code at specific points during page crawling. They receive the Playwright `Page` object, giving you full control.
+
+## Available Hooks
+
+| Hook | When | Use Case |
+|------|------|----------|
+| `onPageCreated` | After new page is created | Set up listeners, inject scripts |
+| `beforeGoto` | Before `page.goto()` | Modify headers, log navigation |
+| `afterGoto` | After navigation completes | Check page state, dismiss dialogs |
+| `onExecutionStarted` | Before custom JS runs | Set up monitoring |
+| `beforeReturnHtml` | Before capturing HTML | Final DOM modifications |
+
+## Usage
+
+```typescript
+const crawler = new WebCrawler();
+await crawler.start();
+
+crawler.setHook("afterGoto", async (page) => {
+  // Dismiss cookie banners
+  const banner = page.locator('[class*="cookie-banner"]');
+  if (await banner.isVisible()) {
+    await banner.locator("button").first().click();
+  }
+});
+
+crawler.setHook("beforeReturnHtml", async (page) => {
+  // Expand all collapsed sections
+  const toggles = page.locator('[aria-expanded="false"]');
+  for (const toggle of await toggles.all()) {
+    await toggle.click();
+  }
+});
+
+const result = await crawler.crawl("https://example.com");
+```
+
+## Hook Signature
+
+```typescript
+type HookFn = (page: Page, ...args: unknown[]) => Promise<void>;
+```
+
+All hooks receive the Playwright `Page` as their first argument. The `beforeGoto` hook also receives the target URL.
+
+## Custom Strategy Hooks
+
+If you implement a custom `CrawlerStrategy`, hooks are managed via the base class:
+
+```typescript
+class MyStrategy extends CrawlerStrategy {
+  async crawl(url: string, config: CrawlerRunConfig) {
+    const page = /* ... */;
+    await this.executeHook("onPageCreated", page);
+    await this.executeHook("beforeGoto", page, url);
+    // ... navigate ...
+    await this.executeHook("afterGoto", page);
+    // ...
+  }
+}
+```

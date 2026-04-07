@@ -1,0 +1,85 @@
+---
+title: Screenshot Capture
+description: Capture full-page screenshots and PDFs from multiple URLs.
+---
+
+Feedstock can capture full-page screenshots and PDFs alongside regular crawl data.
+
+## Single Screenshot
+
+```typescript
+import { WebCrawler, CacheMode } from "feedstock";
+
+const crawler = new WebCrawler({
+  config: { viewport: { width: 1280, height: 720 } },
+});
+
+const result = await crawler.crawl("https://example.com", {
+  cacheMode: CacheMode.Bypass,
+  screenshot: true,
+});
+
+if (result.screenshot) {
+  // screenshot is a base64-encoded PNG
+  const buffer = Buffer.from(result.screenshot, "base64");
+  await Bun.write("screenshot.png", buffer);
+  console.log("Saved screenshot.png");
+}
+
+await crawler.close();
+```
+
+## PDF Capture
+
+```typescript
+const result = await crawler.crawl("https://example.com", {
+  cacheMode: CacheMode.Bypass,
+  pdf: true,
+});
+
+if (result.pdf) {
+  await Bun.write("page.pdf", result.pdf);
+}
+```
+
+<Callout type="warn">
+PDF capture only works with the Chromium browser backend. Firefox and WebKit do not support `page.pdf()`.
+</Callout>
+
+## Batch Screenshots
+
+Capture screenshots from multiple URLs:
+
+```typescript
+const urls = [
+  "https://example.com",
+  "https://example.com/about",
+  "https://example.com/pricing",
+];
+
+const results = await crawler.crawlMany(
+  urls,
+  { cacheMode: CacheMode.Bypass, screenshot: true },
+  { concurrency: 3 },
+);
+
+for (const result of results) {
+  if (result.screenshot) {
+    const slug = new URL(result.url).pathname.replace(/\//g, "_") || "index";
+    const buffer = Buffer.from(result.screenshot, "base64");
+    await Bun.write(`screenshots/${slug}.png`, buffer);
+  }
+}
+```
+
+## Wait for Content Before Capture
+
+Ensure dynamic content is loaded before taking the screenshot:
+
+```typescript
+const result = await crawler.crawl("https://app.example.com/dashboard", {
+  screenshot: true,
+  waitFor: { kind: "selector", value: ".dashboard-loaded" },
+  waitAfterLoad: 1000, // extra 1s for animations to settle
+});
+```

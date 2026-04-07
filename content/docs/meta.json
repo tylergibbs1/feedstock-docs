@@ -1,0 +1,31 @@
+{
+  "title": "Documentation",
+  "pages": [
+    "---Getting Started---",
+    "index",
+    "getting-started",
+    "---Core---",
+    "crawling",
+    "configuration",
+    "content-scraping",
+    "markdown-generation",
+    "caching",
+    "---Extraction---",
+    "extraction",
+    "css-extraction",
+    "regex-extraction",
+    "---Deep Crawling---",
+    "deep-crawling",
+    "filters",
+    "scorers",
+    "---Browser---",
+    "browser-backends",
+    "hooks",
+    "---Utilities---",
+    "rate-limiting",
+    "robots-txt",
+    "logging",
+    "---Guides---",
+    "guides"
+  ]
+}

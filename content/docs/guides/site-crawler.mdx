@@ -1,0 +1,133 @@
+---
+title: Build a Site Crawler
+description: Deep crawl an entire site with filters, rate limiting, and robots.txt compliance.
+---
+
+This guide builds a production-ready site crawler that recursively discovers and crawls pages while respecting site policies.
+
+## The Setup
+
+```typescript
+import {
+  WebCrawler,
+  CacheMode,
+  FilterChain,
+  DomainFilter,
+  ContentTypeFilter,
+  URLPatternFilter,
+  RateLimiter,
+  RobotsParser,
+  CompositeScorer,
+  KeywordRelevanceScorer,
+  PathDepthScorer,
+} from "feedstock";
+```
+
+## Basic Deep Crawl
+
+```typescript
+const crawler = new WebCrawler();
+
+const results = await crawler.deepCrawl(
+  "https://docs.example.com",
+  { cacheMode: CacheMode.Enabled },
+  { maxDepth: 3, maxPages: 200 },
+);
+
+console.log(`Crawled ${results.length} pages`);
+for (const r of results) {
+  console.log(`${r.statusCode} ${r.url}`);
+}
+
+await crawler.close();
+```
+
+## Adding Filters
+
+Restrict crawling to relevant pages:
+
+```typescript
+const filterChain = new FilterChain()
+  .add(new DomainFilter({ allowed: ["docs.example.com"] }))
+  .add(new ContentTypeFilter())  // skip images, PDFs, etc.
+  .add(new URLPatternFilter({
+    exclude: [/\/api\//, /\/login/, /\/signup/, /\?/],
+  }));
+```
+
+## Adding Rate Limiting and Robots.txt
+
+Be a good citizen:
+
+```typescript
+const rateLimiter = new RateLimiter({ baseDelay: 500 });
+const robotsParser = new RobotsParser("my-site-crawler");
+```
+
+## Prioritized Crawling
+
+Use scorers to crawl the most relevant pages first:
+
+```typescript
+const scorer = new CompositeScorer()
+  .add(new KeywordRelevanceScorer(["guide", "tutorial", "api"], 2.0))
+  .add(new PathDepthScorer(8, 1.0));
+```
+
+## Putting It All Together
+
+```typescript
+const crawler = new WebCrawler({ verbose: true });
+
+const results = await crawler.deepCrawl(
+  "https://docs.example.com",
+  {
+    cacheMode: CacheMode.Enabled,
+    generateMarkdown: true,
+    excludeTags: ["nav", "footer", "aside"],
+  },
+  {
+    maxDepth: 3,
+    maxPages: 500,
+    concurrency: 3,
+    filterChain,
+    rateLimiter,
+    robotsParser,
+    scorer,
+  },
+);
+
+// Save results
+for (const result of results) {
+  if (result.success && result.markdown) {
+    const filename = result.url.replace(/[^a-z0-9]/gi, "_") + ".md";
+    await Bun.write(`output/${filename}`, result.markdown.rawMarkdown);
+  }
+}
+
+console.log(`Saved ${results.length} pages to output/`);
+await crawler.close();
+```
+
+## Streaming for Large Sites
+
+For sites with thousands of pages, use streaming to avoid holding everything in memory:
+
+```typescript
+let count = 0;
+
+for await (const result of crawler.deepCrawlStream(
+  "https://docs.example.com",
+  { cacheMode: CacheMode.Enabled },
+  { maxDepth: 3, maxPages: 1000, filterChain, rateLimiter },
+)) {
+  count++;
+  if (result.success) {
+    // Process and discard immediately
+    await processPage(result);
+  }
+  if (count % 50 === 0) {
+    console.log(`Progress: ${count} pages crawled`);
+  }
+}
+```

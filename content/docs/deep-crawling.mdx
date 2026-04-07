@@ -1,0 +1,106 @@
+---
+title: Deep Crawling
+description: Recursively crawl entire sites with BFS, DFS, or BestFirst strategies.
+---
+
+Deep crawling follows links from a starting URL and recursively crawls discovered pages. Feedstock provides three traversal strategies.
+
+## Quick Start
+
+```typescript
+const results = await crawler.deepCrawl(
+  "https://example.com",
+  { cacheMode: CacheMode.Bypass },
+  { maxDepth: 2, maxPages: 50 },
+);
+
+for (const result of results) {
+  console.log(`${result.url}: ${result.success}`);
+}
+```
+
+## Streaming
+
+For large crawls, use streaming to process results as they arrive:
+
+```typescript
+for await (const result of crawler.deepCrawlStream(
+  "https://example.com",
+  { cacheMode: CacheMode.Bypass },
+  { maxDepth: 3, maxPages: 100 },
+)) {
+  console.log(`Crawled: ${result.url}`);
+  // Process each result immediately
+}
+```
+
+## Strategies
+
+### BFS (Breadth-First Search)
+
+Default strategy. Explores all URLs at depth N before moving to depth N+1.
+
+- Best for: broad coverage, sitemap discovery
+- Processes pages level by level with concurrent batching
+
+### DFS (Depth-First Search)
+
+Follows a single path to max depth before backtracking.
+
+- Best for: deep section exploration, finding deeply nested content
+
+### BestFirst (Score-Based)
+
+Prioritizes URLs by score using a `CompositeScorer`. Automatically selected when you provide a `scorer` in the config.
+
+```typescript
+import { CompositeScorer, KeywordRelevanceScorer, PathDepthScorer } from "feedstock";
+
+const scorer = new CompositeScorer()
+  .add(new KeywordRelevanceScorer(["docs", "api"], 2.0))
+  .add(new PathDepthScorer(10, 1.0));
+
+const results = await crawler.deepCrawl(
+  "https://example.com",
+  {},
+  { maxDepth: 3, maxPages: 50, scorer },
+);
+```
+
+## DeepCrawlConfig
+
+```typescript
+interface DeepCrawlConfig {
+  maxDepth: number;          // Max link-following depth (default: 3)
+  maxPages: number;          // Max pages to crawl (default: 100)
+  concurrency: number;       // Concurrent page fetches (default: 5)
+  filterChain?: FilterChain; // URL filter chain
+  scorer?: CompositeScorer;  // URL scorer (enables BestFirst)
+  rateLimiter?: RateLimiter; // Per-domain rate limiting
+  robotsParser?: RobotsParser; // Robots.txt compliance
+  logger?: Logger;           // Logger instance
+}
+```
+
+## With Filters and Rate Limiting
+
+```typescript
+import {
+  FilterChain, DomainFilter, ContentTypeFilter,
+  RateLimiter, RobotsParser,
+} from "feedstock";
+
+const results = await crawler.deepCrawl(
+  "https://example.com",
+  { cacheMode: CacheMode.Bypass },
+  {
+    maxDepth: 2,
+    maxPages: 100,
+    filterChain: new FilterChain()
+      .add(new DomainFilter({ allowed: ["example.com"] }))
+      .add(new ContentTypeFilter()),
+    rateLimiter: new RateLimiter({ baseDelay: 500 }),
+    robotsParser: new RobotsParser(),
+  },
+);
+```

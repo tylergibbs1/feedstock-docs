@@ -1,0 +1,103 @@
+---
+title: Crawling
+description: Core crawling methods and the WebCrawler class.
+---
+
+The `WebCrawler` class is the main entry point for feedstock. It manages the browser lifecycle, caching, scraping, and extraction pipeline.
+
+## Creating a Crawler
+
+```typescript
+import { WebCrawler } from "feedstock";
+
+// Minimal — uses all defaults
+const crawler = new WebCrawler();
+
+// With options
+const crawler = new WebCrawler({
+  verbose: true,
+  config: {
+    browserType: "chromium",
+    headless: true,
+    viewport: { width: 1280, height: 720 },
+  },
+});
+```
+
+## Lifecycle
+
+The crawler must be started before use and closed when done:
+
+```typescript
+await crawler.start();   // launches browser, opens cache
+// ... crawl pages ...
+await crawler.close();   // closes browser, closes cache
+```
+
+<Callout type="info">
+If you call `crawl()` without calling `start()` first, the crawler will auto-start.
+</Callout>
+
+## Single Page Crawl
+
+```typescript
+const result = await crawler.crawl("https://example.com", {
+  cacheMode: CacheMode.Bypass,
+  waitFor: { kind: "selector", value: "#content" },
+  screenshot: true,
+});
+```
+
+The returned `CrawlResult` contains everything extracted from the page:
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `url` | `string` | The crawled URL |
+| `html` | `string` | Raw page HTML |
+| `cleanedHtml` | `string \| null` | HTML with scripts/styles removed |
+| `markdown` | `MarkdownGenerationResult \| null` | Converted markdown |
+| `links` | `Links` | Internal and external links |
+| `media` | `Media` | Images, videos, and audio |
+| `metadata` | `Record<string, unknown> \| null` | Page metadata |
+| `extractedContent` | `string \| null` | Structured extraction results |
+| `statusCode` | `number \| null` | HTTP status code |
+| `screenshot` | `string \| null` | Base64-encoded screenshot |
+| `pdf` | `Buffer \| null` | PDF capture |
+
+## Multiple URLs
+
+```typescript
+const results = await crawler.crawlMany(
+  urls,
+  { cacheMode: CacheMode.Bypass },
+  { concurrency: 5 },
+);
+```
+
+URLs are crawled concurrently with the specified concurrency limit (default 5).
+
+## Process Raw HTML
+
+Skip the browser entirely and process HTML directly:
+
+```typescript
+const result = await crawler.processHtml(htmlString, {
+  generateMarkdown: true,
+  extractionStrategy: { type: "css", params: schema },
+});
+```
+
+## WebCrawlerOptions
+
+```typescript
+interface WebCrawlerOptions {
+  config?: Partial<BrowserConfig>;
+  crawlerStrategy?: CrawlerStrategy;
+  scrapingStrategy?: ContentScrapingStrategy;
+  markdownGenerator?: MarkdownGenerationStrategy;
+  logger?: Logger;
+  verbose?: boolean;
+}
+```
+
+Every component is swappable via the constructor. Pass a custom `CrawlerStrategy` to change how pages are fetched, a custom `ContentScrapingStrategy` to change how HTML is cleaned, or a custom `MarkdownGenerationStrategy` to change markdown output.

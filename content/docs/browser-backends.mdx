@@ -1,0 +1,85 @@
+---
+title: Browser Backends
+description: Use Playwright or Lightpanda for browser automation.
+---
+
+Feedstock supports two browser backends, configured via the `backend` field in `BrowserConfig`.
+
+## Playwright (Default)
+
+Launches a local browser via Playwright. Supports Chromium, Firefox, and WebKit.
+
+```typescript
+const crawler = new WebCrawler({
+  config: {
+    backend: { kind: "playwright" },
+    browserType: "chromium", // or "firefox", "webkit"
+    headless: true,
+  },
+});
+```
+
+### Setup
+
+```bash
+bun add feedstock
+bunx playwright install chromium
+```
+
+## Lightpanda
+
+[Lightpanda](https://lightpanda.io) is an AI-native headless browser built for speed. It connects via Chrome DevTools Protocol (CDP) and works as a drop-in replacement.
+
+### Local Mode
+
+Launches a local Lightpanda process and connects via CDP.
+
+```bash
+bun add @lightpanda/browser
+```
+
+```typescript
+const crawler = new WebCrawler({
+  config: {
+    backend: {
+      kind: "lightpanda",
+      mode: "local",
+      host: "127.0.0.1",  // optional, default
+      port: 9222,          // optional, default
+    },
+  },
+});
+```
+
+<Callout type="info">
+`@lightpanda/browser` is an optional dependency. It's only needed when using local Lightpanda mode.
+</Callout>
+
+### Cloud Mode
+
+Connect to Lightpanda Cloud without installing anything locally.
+
+```typescript
+const crawler = new WebCrawler({
+  config: {
+    backend: {
+      kind: "lightpanda",
+      mode: "cloud",
+      token: process.env.LIGHTPANDA_TOKEN!,
+      endpoint: "wss://euwest.cloud.lightpanda.io/ws", // optional, default
+    },
+  },
+});
+```
+
+## How It Works
+
+Both backends produce a standard Playwright `Browser` object. The rest of the pipeline (page navigation, content capture, scraping, extraction) works identically regardless of which backend you choose.
+
+```
+Playwright backend:  launcher.launch() → Browser
+Lightpanda local:    lightpanda.serve() → chromium.connectOverCDP() → Browser
+Lightpanda cloud:    chromium.connectOverCDP(wss://...) → Browser
+```
+
+All session management, page lifecycle, and cleanup is handled by the `BrowserManager`.

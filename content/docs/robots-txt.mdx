@@ -1,0 +1,76 @@
+---
+title: Robots.txt
+description: Parse and respect robots.txt directives.
+---
+
+The `RobotsParser` fetches, parses, and caches robots.txt files. It supports `Allow`, `Disallow`, `Crawl-delay`, `Sitemap`, wildcard patterns, and end-of-URL anchors.
+
+## Usage
+
+```typescript
+import { RobotsParser } from "feedstock";
+
+const parser = new RobotsParser("feedstock"); // user-agent name
+
+// Fetch and parse robots.txt for a URL's origin
+const directives = await parser.fetch("https://example.com/page");
+
+// Check if a specific URL is allowed
+if (parser.isAllowed("https://example.com/admin", directives)) {
+  // OK to crawl
+}
+
+// Access crawl delay
+if (directives.crawlDelay) {
+  rateLimiter.setDelay("https://example.com/", directives.crawlDelay * 1000);
+}
+
+// Discover sitemaps
+console.log(directives.sitemaps);
+// ["https://example.com/sitemap.xml"]
+```
+
+## With Deep Crawling
+
+```typescript
+const results = await crawler.deepCrawl(
+  "https://example.com",
+  {},
+  {
+    robotsParser: new RobotsParser("my-crawler"),
+  },
+);
+```
+
+The deep crawl strategies automatically check robots.txt before crawling each discovered URL.
+
+## Parsing Rules
+
+The parser follows the [Robots Exclusion Protocol](https://en.wikipedia.org/wiki/Robots_exclusion_standard):
+
+- **User-agent matching** — matches your bot name, falls back to `*`
+- **Allow/Disallow** — longest match wins (more specific rules take priority)
+- **Wildcards** — `*` matches any sequence, `$` anchors to end of URL
+- **Crawl-delay** — per-agent delay in seconds
+- **Sitemap** — sitemap URLs (regardless of user-agent section)
+
+## Example robots.txt
+
+```
+User-agent: *
+Disallow: /private/
+Disallow: /admin
+Allow: /admin/public
+Crawl-delay: 2
+
+User-agent: feedstock
+Disallow: /secret/
+Allow: /secret/public/
+Crawl-delay: 1
+
+Sitemap: https://example.com/sitemap.xml
+```
+
+## Caching
+
+Results are cached per-origin after the first fetch. Call `parser.clearCache()` to reset.

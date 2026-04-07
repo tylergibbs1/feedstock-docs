@@ -1,0 +1,99 @@
+---
+title: Scrape Product Data
+description: Extract structured product listings from e-commerce pages using CSS selectors.
+---
+
+This guide walks through extracting structured product data from a web page using feedstock's CSS extraction strategy.
+
+## The Goal
+
+Given a product listing page, extract each product's name, price, image, and tags into structured JSON.
+
+## Step 1: Inspect the Page
+
+Assume the target page has this structure:
+
+```html
+<div class="product-grid">
+  <div class="product-card">
+    <img src="/img/widget.jpg" alt="Widget Pro" />
+    <h3 class="product-name">Widget Pro</h3>
+    <span class="price">$29.99</span>
+    <div class="tags">
+      <span class="tag">new</span>
+      <span class="tag">featured</span>
+    </div>
+  </div>
+  <!-- more product-cards... -->
+</div>
+```
+
+## Step 2: Define the Schema
+
+```typescript
+const schema = {
+  name: "products",
+  baseSelector: ".product-card",
+  fields: [
+    { name: "title", selector: ".product-name", type: "text" as const },
+    { name: "price", selector: ".price", type: "text" as const },
+    { name: "image", selector: "img", type: "attribute" as const, attribute: "src" },
+    { name: "tags", selector: ".tag", type: "list" as const },
+  ],
+};
+```
+
+## Step 3: Crawl and Extract
+
+```typescript
+import { WebCrawler, CacheMode } from "feedstock";
+
+const crawler = new WebCrawler();
+
+const result = await crawler.crawl("https://store.example.com/products", {
+  cacheMode: CacheMode.Bypass,
+  waitFor: { kind: "selector", value: ".product-card" },
+  extractionStrategy: { type: "css", params: schema },
+});
+
+const products = JSON.parse(result.extractedContent!)
+  .map((item: { content: string }) => JSON.parse(item.content));
+
+console.log(products);
+// [
+//   { title: "Widget Pro", price: "$29.99", image: "/img/widget.jpg", tags: ["new", "featured"] },
+//   ...
+// ]
+
+await crawler.close();
+```
+
+## Step 4: Handle Pagination
+
+For paginated listings, crawl each page:
+
+```typescript
+const allProducts = [];
+
+for (let page = 1; page <= 5; page++) {
+  const result = await crawler.crawl(
+    `https://store.example.com/products?page=${page}`,
+    {
+      cacheMode: CacheMode.Bypass,
+      extractionStrategy: { type: "css", params: schema },
+    },
+  );
+
+  if (result.extractedContent) {
+    const items = JSON.parse(result.extractedContent)
+      .map((item: { content: string }) => JSON.parse(item.content));
+    allProducts.push(...items);
+  }
+}
+
+console.log(`Extracted ${allProducts.length} products`);
+```
+
+<Callout type="info">
+For JS-rendered pages, use `waitFor` to ensure the content is loaded before extraction. The `{ kind: "selector", value: ".product-card" }` pattern works well for waiting until products render.
+</Callout>

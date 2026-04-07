@@ -1,0 +1,70 @@
+---
+title: Rate Limiting
+description: Per-domain rate limiting with exponential backoff.
+---
+
+The `RateLimiter` tracks request timing per domain and enforces delays between requests. On 429/503 responses, it increases the delay exponentially. On success, it gradually recovers.
+
+## Usage
+
+```typescript
+import { RateLimiter } from "feedstock";
+
+const limiter = new RateLimiter({
+  baseDelay: 200,      // 200ms between requests to same domain
+  maxDelay: 30_000,    // Cap backoff at 30s
+  backoffFactor: 2,    // Double delay on failure
+  recoveryFactor: 0.75, // Reduce delay by 25% on success
+  jitter: 0.1,         // 10% random jitter
+});
+
+// Before each request
+await limiter.waitIfNeeded("https://example.com/page1");
+
+// After each request
+const shouldRetry = limiter.reportResult("https://example.com/page1", 200);
+```
+
+## With Deep Crawling
+
+```typescript
+const results = await crawler.deepCrawl(
+  "https://example.com",
+  {},
+  {
+    maxDepth: 2,
+    rateLimiter: new RateLimiter({ baseDelay: 500 }),
+  },
+);
+```
+
+The deep crawl strategies automatically call `waitIfNeeded` before each request and `reportResult` after.
+
+## Configuration
+
+| Option | Type | Default | Description |
+|--------|------|---------|-------------|
+| `baseDelay` | `number` | `200` | Minimum delay between requests (ms) |
+| `maxDelay` | `number` | `30000` | Maximum backoff delay (ms) |
+| `backoffFactor` | `number` | `2` | Multiplier on 429/503 |
+| `recoveryFactor` | `number` | `0.75` | Multiplier on success recovery |
+| `jitter` | `number` | `0.1` | Random jitter range (0-1) |
+
+## Manual Delay Override
+
+Set explicit delays, e.g., from robots.txt `Crawl-delay`:
+
+```typescript
+limiter.setDelay("https://example.com/", 5000); // 5s between requests
+```
+
+## Backoff Behavior
+
+```
+Request 1: 200 OK     → delay stays at 200ms
+Request 2: 429        → delay increases to 400ms
+Request 3: 429        → delay increases to 800ms
+Request 4: 200 OK     → delay recovers to 600ms
+Request 5: 200 OK     → delay recovers to 450ms
+...                    → gradually returns to 200ms
+```

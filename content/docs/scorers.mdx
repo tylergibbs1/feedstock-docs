@@ -1,0 +1,93 @@
+---
+title: URL Scorers
+description: Prioritize URLs during BestFirst deep crawling.
+---
+
+Scorers assign a relevance score (0-1) to discovered URLs. Used by the `BestFirstDeepCrawlStrategy` to determine crawl priority.
+
+## CompositeScorer
+
+Combine multiple scorers with weighted averaging:
+
+```typescript
+import {
+  CompositeScorer,
+  KeywordRelevanceScorer,
+  PathDepthScorer,
+  FreshnessScorer,
+  DomainAuthorityScorer,
+} from "feedstock";
+
+const scorer = new CompositeScorer()
+  .add(new KeywordRelevanceScorer(["docs", "api", "guide"], 2.0))
+  .add(new PathDepthScorer(10, 1.0))
+  .add(new FreshnessScorer(0.5))
+  .add(new DomainAuthorityScorer(["example.com"], 1.5));
+
+const score = scorer.score("https://example.com/docs/api", 1);
+```
+
+## Built-in Scorers
+
+### KeywordRelevanceScorer
+
+Scores based on keyword matches in the URL and anchor text.
+
+```typescript
+new KeywordRelevanceScorer(["product", "pricing"], 2.0)
+```
+
+Score = (matching keywords) / (total keywords). Also checks `context.anchorText`.
+
+### PathDepthScorer
+
+Shallower URLs score higher. `/about` scores higher than `/a/b/c/d/e`.
+
+```typescript
+new PathDepthScorer(10, 1.0) // maxPathDepth, weight
+```
+
+Score = max(0, 1 - segments/maxPathDepth).
+
+### FreshnessScorer
+
+URLs with date patterns (e.g., `/2024/01/post`) score based on recency.
+
+```typescript
+new FreshnessScorer(0.5)
+```
+
+- Current year: ~1.0
+- 5+ years old: 0
+- No date signal: 0.3
+
+### DomainAuthorityScorer
+
+Preferred domains score highest.
+
+```typescript
+new DomainAuthorityScorer(["example.com"], 1.5)
+```
+
+- Exact match: 1.0
+- Subdomain of preferred: 0.8
+- Unknown domain: 0.3
+
+## Custom Scorers
+
+Extend `URLScorer`:
+
+```typescript
+import { URLScorer, type ScorerContext } from "feedstock";
+
+class ContentLengthScorer extends URLScorer {
+  constructor(weight = 1.0) {
+    super("content-length", weight);
+  }
+
+  score(url: string, depth: number, context?: ScorerContext): number {
+    // Prefer shorter URLs (likely more important pages)
+    return Math.max(0, 1 - url.length / 200);
+  }
+}
+```

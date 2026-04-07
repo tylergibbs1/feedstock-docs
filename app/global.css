@@ -1,0 +1,91 @@
+@import "tailwindcss";
+@import "fumadocs-ui/css/neutral.css";
+@import "fumadocs-ui/css/preset.css";
+
+@custom-variant dark (&:is(.dark *));
+
+:root {
+  --fd-background: oklch(0.975 0.005 250);
+  --fd-foreground: oklch(0.2 0.01 250);
+  --fd-card: oklch(1 0 0);
+  --fd-card-foreground: oklch(0.2 0.01 250);
+  --fd-popover: oklch(1 0 0);
+  --fd-popover-foreground: oklch(0.2 0.01 250);
+  --fd-primary: oklch(0.62 0.16 250);
+  --fd-primary-foreground: oklch(1 0 0);
+  --fd-secondary: oklch(0.93 0.01 250);
+  --fd-secondary-foreground: oklch(0.2 0.01 250);
+  --fd-muted: oklch(0.95 0.008 250);
+  --fd-muted-foreground: oklch(0.5 0.03 250);
+  --fd-accent: oklch(0.9 0.03 250);
+  --fd-accent-foreground: oklch(0.2 0.01 250);
+  --fd-border: oklch(0.9 0.015 250);
+  --fd-ring: oklch(0.62 0.16 250);
+}
+
+.dark {
+  --fd-background: oklch(0.15 0.015 250);
+  --fd-foreground: oklch(0.95 0.005 250);
+  --fd-card: oklch(0.2 0.015 250);
+  --fd-card-foreground: oklch(0.95 0.005 250);
+  --fd-popover: oklch(0.2 0.015 250);
+  --fd-popover-foreground: oklch(0.95 0.005 250);
+  --fd-primary: oklch(0.72 0.14 250);
+  --fd-primary-foreground: oklch(0.15 0.015 250);
+  --fd-secondary: oklch(0.25 0.02 250);
+  --fd-secondary-foreground: oklch(0.95 0.005 250);
+  --fd-muted: oklch(0.22 0.015 250);
+  --fd-muted-foreground: oklch(0.65 0.03 250);
+  --fd-accent: oklch(0.3 0.025 250);
+  --fd-accent-foreground: oklch(0.95 0.005 250);
+  --fd-border: oklch(0.28 0.02 250);
+  --fd-ring: oklch(0.72 0.14 250);
+}
+
+@theme inline {
+  --color-fd-background: var(--fd-background);
+  --color-fd-foreground: var(--fd-foreground);
+  --color-fd-card: var(--fd-card);
+  --color-fd-card-foreground: var(--fd-card-foreground);
+  --color-fd-popover: var(--fd-popover);
+  --color-fd-popover-foreground: var(--fd-popover-foreground);
+  --color-fd-primary: var(--fd-primary);
+  --color-fd-primary-foreground: var(--fd-primary-foreground);
+  --color-fd-secondary: var(--fd-secondary);
+  --color-fd-secondary-foreground: var(--fd-secondary-foreground);
+  --color-fd-muted: var(--fd-muted);
+  --color-fd-muted-foreground: var(--fd-muted-foreground);
+  --color-fd-accent: var(--fd-accent);
+  --color-fd-accent-foreground: var(--fd-accent-foreground);
+  --color-fd-border: var(--fd-border);
+  --color-fd-ring: var(--fd-ring);
+
+  --font-sans: var(--font-inter), -apple-system, sans-serif;
+  --font-mono: var(--font-jetbrains), monospace;
+  --font-serif: Georgia, serif;
+
+  --radius-sm: 0.375rem;
+  --radius-md: 0.5rem;
+  --radius-lg: 0.75rem;
+  --radius-xl: 1rem;
+}
+
+@layer base {
+  body {
+    letter-spacing: -0.02em;
+  }
+}
+
+@layer components {
+  .mermaid-diagram {
+    overflow-x: auto;
+    margin-block: 1.5rem;
+  }
+
+  .mermaid-diagram svg {
+    display: block;
+    max-width: 100%;
+    height: auto;
+    margin-inline: auto;
+  }
+}

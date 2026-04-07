@@ -1,0 +1,84 @@
+---
+title: Caching
+description: SQLite-based crawl result caching powered by bun:sqlite.
+---
+
+Feedstock caches crawl results in SQLite using Bun's native `bun:sqlite` driver. This avoids redundant network requests when re-crawling the same URLs.
+
+## Cache Modes
+
+```typescript
+import { CacheMode } from "feedstock";
+```
+
+| Mode | Reads Cache | Writes Cache | Use Case |
+|------|:-----------:|:------------:|----------|
+| `CacheMode.Enabled` | Yes | Yes | Default — full caching |
+| `CacheMode.Disabled` | No | No | No caching at all |
+| `CacheMode.ReadOnly` | Yes | No | Use cache but don't update it |
+| `CacheMode.WriteOnly` | No | Yes | Always fetch, but save results |
+| `CacheMode.Bypass` | No | No | Skip cache for this request |
+
+## Usage
+
+```typescript
+// Default: cache enabled
+const result = await crawler.crawl("https://example.com");
+console.log(result.cacheStatus); // "miss" on first, "hit" on second
+
+// Force fresh fetch
+const fresh = await crawler.crawl("https://example.com", {
+  cacheMode: CacheMode.Bypass,
+});
+```
+
+## Cache Result Metadata
+
+Every `CrawlResult` includes cache metadata:
+
+```typescript
+result.cacheStatus  // "hit" | "miss" | "bypass" | null
+result.cachedAt     // Unix timestamp or null
+```
+
+## Direct Cache Access
+
+You can use the cache directly for custom workflows:
+
+```typescript
+import { CrawlCache } from "feedstock";
+
+const cache = new CrawlCache();         // default: ~/.feedstock/cache.db
+const cache = new CrawlCache("/tmp/my-cache.db"); // custom path
+
+// Get
+const entry = cache.get("https://example.com");
+if (entry) {
+  console.log(JSON.parse(entry.result));
+  console.log("Cached at:", entry.cachedAt);
+}
+
+// Set
+cache.set("https://example.com", JSON.stringify(result));
+
+// Batch insert (atomic transaction)
+cache.setMany([
+  { url: "https://a.com", result: "..." },
+  { url: "https://b.com", result: "..." },
+]);
+
+// Delete / Clear
+cache.delete("https://example.com");
+cache.clear();
+
+cache.close();
+```
+
+## Storage
+
+The cache is stored at `~/.feedstock/cache.db` by default. It uses:
+
+- **WAL mode** for concurrent read performance
+- **`bun:sqlite`** for zero-dependency, native speed
+- **Prepared statements** via `db.query()` for safe parameterized queries
+- **Transactions** via `db.transaction()` for atomic batch operations

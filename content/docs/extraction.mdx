@@ -1,0 +1,71 @@
+---
+title: Extraction Strategies
+description: Extract structured data from crawled pages using CSS selectors or regex.
+---
+
+Extraction strategies transform cleaned HTML into structured data. Feedstock ships with CSS selector and regex strategies, plus a base class for custom implementations.
+
+## How It Works
+
+Set `extractionStrategy` in your crawl config:
+
+```typescript
+const result = await crawler.crawl("https://example.com/products", {
+  extractionStrategy: {
+    type: "css",
+    params: {
+      name: "products",
+      baseSelector: ".product",
+      fields: [
+        { name: "title", selector: "h2", type: "text" },
+        { name: "price", selector: ".price", type: "text" },
+      ],
+    },
+  },
+});
+
+const items = JSON.parse(result.extractedContent!);
+// [{ index: 0, content: '{"title":"Widget","price":"$9.99"}', metadata: {...} }]
+```
+
+## Available Strategies
+
+<Cards>
+  <Card title="CSS Extraction" href="/css-extraction">
+    Map CSS selectors to JSON fields. Best for structured pages with consistent markup.
+  </Card>
+  <Card title="Regex Extraction" href="/regex-extraction">
+    Match patterns in HTML content. Best for extracting specific data formats.
+  </Card>
+</Cards>
+
+## No-Op Strategy
+
+The `NoExtractionStrategy` returns HTML as-is. This is the default when no strategy is configured.
+
+```typescript
+import { NoExtractionStrategy } from "feedstock";
+
+const strategy = new NoExtractionStrategy();
+const items = await strategy.extract(url, html);
+// [{ index: 0, content: html }]
+```
+
+## Custom Strategies
+
+Extend `ExtractionStrategy` to build your own:
+
+```typescript
+import { ExtractionStrategy, type ExtractedItem } from "feedstock";
+
+class JsonApiExtractor extends ExtractionStrategy {
+  async extract(url: string, html: string): Promise<ExtractedItem[]> {
+    // Parse embedded JSON-LD, microdata, etc.
+    const scripts = html.match(/<script type="application\/ld\+json">(.*?)<\/script>/gs);
+    return (scripts ?? []).map((s, i) => ({
+      index: i,
+      content: s.replace(/<\/?script[^>]*>/g, "").trim(),
+    }));
+  }
+}
+```

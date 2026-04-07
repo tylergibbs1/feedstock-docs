@@ -1,0 +1,115 @@
+---
+title: URL Filters
+description: Control which URLs are crawled during deep crawling.
+---
+
+Filters decide whether a discovered URL should be crawled. Compose them into a `FilterChain` for short-circuit evaluation.
+
+## Filter Chain
+
+```typescript
+import { FilterChain, DomainFilter, URLPatternFilter, ContentTypeFilter } from "feedstock";
+
+const chain = new FilterChain()
+  .add(new DomainFilter({ allowed: ["example.com"] }))
+  .add(new URLPatternFilter({ exclude: [/\/admin/, /\/login/] }))
+  .add(new ContentTypeFilter());
+
+// Use in deep crawling
+const results = await crawler.deepCrawl(url, {}, { filterChain: chain });
+```
+
+The chain short-circuits: if any filter rejects a URL, subsequent filters are not called.
+
+## Available Filters
+
+### URLPatternFilter
+
+Match URLs against glob or regex patterns.
+
+```typescript
+new URLPatternFilter({
+  include: [/\/blog\//, /\/docs\//],   // URL must match at least one
+  exclude: [/\/draft/, /\/internal/],  // URL must not match any
+})
+```
+
+- `include` — if set, at least one pattern must match
+- `exclude` — takes priority over include; checked first
+- Supports both `RegExp` and glob-like strings (`*/products/*`)
+
+### DomainFilter
+
+Whitelist or blacklist domains.
+
+```typescript
+// Only crawl these domains
+new DomainFilter({ allowed: ["example.com", "docs.example.com"] })
+
+// Block specific domains
+new DomainFilter({ blocked: ["ads.example.com", "tracker.io"] })
+```
+
+Blocked domains take priority over allowed domains.
+
+### ContentTypeFilter
+
+Filter by file extension to skip non-HTML resources.
+
+```typescript
+// Default: allows HTML-like extensions, blocks images/PDFs/archives/CSS/JS
+new ContentTypeFilter()
+
+// Custom extensions
+new ContentTypeFilter({
+  allowedExtensions: ["html", "htm", "php", ""],
+  blockedExtensions: ["pdf", "jpg", "png"],
+})
+```
+
+Default blocked extensions include: `jpg`, `png`, `gif`, `pdf`, `zip`, `css`, `js`, `woff`, `mp4`, and more.
+
+### MaxDepthFilter
+
+Limit crawl depth per-URL (used internally by deep crawl strategies).
+
+```typescript
+const depths = new Map<string, number>();
+new MaxDepthFilter(3, depths)
+```
+
+## Filter Stats
+
+Every filter tracks pass/reject statistics:
+
+```typescript
+const filter = new URLPatternFilter({ exclude: [/\/nope/] });
+await filter.apply("https://example.com/yes");
+await filter.apply("https://example.com/nope");
+
+console.log(filter.getStats());
+// { total: 2, passed: 1, rejected: 1 }
+
+// Chain-level stats
+console.log(chain.getStats());
+// { "url-pattern": { total: 2, passed: 1, rejected: 1 }, "domain": { ... } }
+```
+
+## Custom Filters
+
+Extend `URLFilter`:
+
+```typescript
+import { URLFilter } from "feedstock";
+
+class RobotsTxtFilter extends URLFilter {
+  constructor(private parser: RobotsParser) {
+    super("robots-txt");
+  }
+
+  protected async test(url: string): Promise<boolean> {
+    const directives = await this.parser.fetch(url);
+    return this.parser.isAllowed(url, directives);
+  }
+}
+```

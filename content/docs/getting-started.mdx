@@ -1,0 +1,114 @@
+---
+title: Getting Started
+description: Install feedstock and crawl your first page.
+---
+
+## Installation
+
+<Steps>
+<Step>
+
+### Install the package
+
+```bash
+bun add feedstock
+```
+
+</Step>
+<Step>
+
+### Install Playwright browsers
+
+```bash
+bunx playwright install chromium
+```
+
+</Step>
+</Steps>
+
+## Your First Crawl
+
+```typescript
+import { WebCrawler } from "feedstock";
+
+const crawler = new WebCrawler();
+
+const result = await crawler.crawl("https://example.com");
+
+if (result.success) {
+  console.log("Title:", result.metadata?.title);
+  console.log("Markdown:", result.markdown?.rawMarkdown);
+  console.log("Links found:", result.links.internal.length);
+}
+
+await crawler.close();
+```
+
+## Crawl Multiple URLs
+
+```typescript
+const results = await crawler.crawlMany(
+  [
+    "https://example.com",
+    "https://example.com/about",
+    "https://example.com/products",
+  ],
+  { cacheMode: CacheMode.Bypass },
+  { concurrency: 3 },
+);
+
+for (const result of results) {
+  console.log(`${result.url}: ${result.success}`);
+}
+```
+
+## Process Raw HTML
+
+You can process HTML without launching a browser:
+
+```typescript
+const html = "<html><body><h1>Hello</h1><p>World</p></body></html>";
+const result = await crawler.processHtml(html);
+
+console.log(result.markdown?.rawMarkdown);
+// # Hello\n\nWorld
+```
+
+## Project Structure
+
+<Files>
+  <Folder name="src" defaultOpen>
+    <File name="index.ts" />
+    <File name="crawler.ts" />
+    <File name="config.ts" />
+    <File name="models.ts" />
+    <Folder name="browser">
+      <File name="manager.ts" />
+    </Folder>
+    <Folder name="strategies">
+      <File name="crawler-strategy.ts" />
+      <File name="scraping-strategy.ts" />
+      <File name="markdown.ts" />
+      <Folder name="extraction">
+        <File name="base.ts" />
+        <File name="css.ts" />
+        <File name="regex.ts" />
+      </Folder>
+    </Folder>
+    <Folder name="deep-crawl">
+      <File name="strategy.ts" />
+      <File name="filters.ts" />
+      <File name="scorers.ts" />
+    </Folder>
+    <Folder name="cache">
+      <File name="database.ts" />
+      <File name="mode.ts" />
+    </Folder>
+    <Folder name="utils">
+      <File name="robots.ts" />
+      <File name="rate-limiter.ts" />
+      <File name="logger.ts" />
+      <File name="html.ts" />
+    </Folder>
+  </Folder>
+</Files>

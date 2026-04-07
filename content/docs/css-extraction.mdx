@@ -1,0 +1,78 @@
+---
+title: CSS Extraction
+description: Extract structured data from HTML using CSS selectors.
+---
+
+The `CssExtractionStrategy` maps CSS selectors to JSON fields, letting you extract structured data from any page with consistent markup.
+
+## Schema Definition
+
+```typescript
+interface CssExtractionSchema {
+  name: string;          // Schema name (for identification)
+  baseSelector: string;  // CSS selector for repeating elements
+  fields: CssField[];    // Fields to extract from each element
+}
+
+interface CssField {
+  name: string;                              // Output field name
+  selector: string;                          // CSS selector within base element
+  type: "text" | "attribute" | "html" | "list"; // Extraction type
+  attribute?: string;                        // For "attribute" type (default: "href")
+}
+```
+
+## Field Types
+
+| Type | Description | Example |
+|------|-------------|---------|
+| `text` | Inner text content | `"Widget A"` |
+| `attribute` | HTML attribute value | `"/products/widget-a"` |
+| `html` | Inner HTML | `"<strong>Bold</strong> text"` |
+| `list` | Array of text from all matches | `["tag1", "tag2"]` |
+
+## Example: Product Scraping
+
+```typescript
+const result = await crawler.crawl("https://store.example.com", {
+  extractionStrategy: {
+    type: "css",
+    params: {
+      name: "products",
+      baseSelector: ".product-card",
+      fields: [
+        { name: "title", selector: ".product-title", type: "text" },
+        { name: "price", selector: ".price", type: "text" },
+        { name: "url", selector: "a.product-link", type: "attribute", attribute: "href" },
+        { name: "image", selector: "img", type: "attribute", attribute: "src" },
+        { name: "tags", selector: ".tag", type: "list" },
+        { name: "description", selector: ".desc", type: "html" },
+      ],
+    },
+  },
+});
+
+const products = JSON.parse(result.extractedContent!).map(
+  (item) => JSON.parse(item.content)
+);
+// [{ title: "Widget A", price: "$9.99", url: "/widget-a", tags: ["sale", "new"] }, ...]
+```
+
+## Direct Usage
+
+```typescript
+import { CssExtractionStrategy } from "feedstock";
+
+const strategy = new CssExtractionStrategy({
+  name: "articles",
+  baseSelector: "article",
+  fields: [
+    { name: "headline", selector: "h2", type: "text" },
+    { name: "body", selector: ".content", type: "html" },
+  ],
+});
+
+const items = await strategy.extract(url, html);
+```
+
+Each extracted item includes both `content` (JSON string) and `metadata` (parsed object) for convenience.

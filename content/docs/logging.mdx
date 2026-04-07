@@ -1,0 +1,61 @@
+---
+title: Logging
+description: Configure logging output for the crawler.
+---
+
+Feedstock uses a simple, pluggable logging interface.
+
+## Built-in Loggers
+
+### ConsoleLogger
+
+Logs to stdout/stderr with level filtering:
+
+```typescript
+import { ConsoleLogger } from "feedstock";
+
+const logger = new ConsoleLogger({
+  level: "debug",  // "debug" | "info" | "warn" | "error"
+  tag: "my-app",   // Prefix for log lines
+});
+
+logger.info("Starting crawl");
+// [my-app] Starting crawl
+```
+
+### SilentLogger
+
+No output. Used by default when `verbose: false`.
+
+```typescript
+import { SilentLogger } from "feedstock";
+
+const logger = new SilentLogger();
+// All methods are no-ops
+```
+
+## Enabling Verbose Mode
+
+```typescript
+const crawler = new WebCrawler({ verbose: true });
+// Equivalent to using ConsoleLogger with level "debug"
+```
+
+## Custom Logger
+
+Implement the `Logger` interface:
+
+```typescript
+import type { Logger } from "feedstock";
+
+const myLogger: Logger = {
+  debug(msg, data) { /* ... */ },
+  info(msg, data)  { /* ... */ },
+  warn(msg, data)  { /* ... */ },
+  error(msg, data) { /* ... */ },
+};
+
+const crawler = new WebCrawler({ logger: myLogger });
+```
+
+This makes it easy to integrate with any logging library (pino, winston, etc.).

@@ -1,0 +1,75 @@
+---
+title: Markdown Generation
+description: Converting crawled HTML to clean Markdown with citations.
+---
+
+Feedstock converts cleaned HTML to Markdown using [Turndown](https://github.com/mixmark-io/turndown), a battle-tested HTML-to-Markdown converter.
+
+## Default Output
+
+Every crawl result includes a `MarkdownGenerationResult`:
+
+```typescript
+interface MarkdownGenerationResult {
+  rawMarkdown: string;           // Clean markdown
+  markdownWithCitations: string; // Links replaced with [1], [2], etc.
+  referencesMarkdown: string;    // [1] https://...\n[2] https://...
+  fitMarkdown: string | null;    // Reserved for content filtering
+}
+```
+
+## Usage
+
+```typescript
+const result = await crawler.crawl("https://example.com");
+
+// Raw markdown
+console.log(result.markdown?.rawMarkdown);
+
+// Citation-style (links as numbered references)
+console.log(result.markdown?.markdownWithCitations);
+
+// Just the references list
+console.log(result.markdown?.referencesMarkdown);
+```
+
+## Disabling Markdown
+
+```typescript
+const result = await crawler.crawl("https://example.com", {
+  generateMarkdown: false,
+});
+// result.markdown will be null
+```
+
+## Custom Markdown Generator
+
+Extend `MarkdownGenerationStrategy` to customize output:
+
+```typescript
+import { MarkdownGenerationStrategy } from "feedstock";
+
+class CustomMarkdownGenerator extends MarkdownGenerationStrategy {
+  generate(url: string, html: string) {
+    // Your custom logic
+    return {
+      rawMarkdown: "...",
+      markdownWithCitations: "...",
+      referencesMarkdown: "",
+      fitMarkdown: null,
+    };
+  }
+}
+
+const crawler = new WebCrawler({
+  markdownGenerator: new CustomMarkdownGenerator(),
+});
+```
+
+## Turndown Configuration
+
+The default generator uses these Turndown options:
+
+- `headingStyle: "atx"` — `# H1`, `## H2`, etc.
+- `codeBlockStyle: "fenced"` — triple backticks
+- `bulletListMarker: "-"` — dashes for unordered lists

@@ -1,0 +1,98 @@
+---
+title: Configuration
+description: BrowserConfig and CrawlerRunConfig reference.
+---
+
+Feedstock uses two configuration objects: `BrowserConfig` for browser-level settings, and `CrawlerRunConfig` for per-crawl behavior.
+
+## BrowserConfig
+
+Controls the browser instance. Set once when creating the `WebCrawler`.
+
+```typescript
+import { createBrowserConfig } from "feedstock";
+
+const config = createBrowserConfig({
+  browserType: "chromium",   // "chromium" | "firefox" | "webkit"
+  headless: true,
+  viewport: { width: 1920, height: 1080 },
+  userAgent: "my-bot/1.0",
+  proxy: { server: "http://proxy:8080" },
+  backend: { kind: "playwright" },
+});
+```
+
+| Option | Type | Default | Description |
+|--------|------|---------|-------------|
+| `browserType` | `"chromium" \| "firefox" \| "webkit"` | `"chromium"` | Browser engine |
+| `headless` | `boolean` | `true` | Run without UI |
+| `viewport` | `{ width, height }` | `1920x1080` | Page viewport size |
+| `userAgent` | `string \| null` | `null` | Custom user agent |
+| `proxy` | `ProxyConfig \| null` | `null` | Proxy server |
+| `ignoreHttpsErrors` | `boolean` | `true` | Ignore SSL errors |
+| `javaEnabled` | `boolean` | `true` | Enable JavaScript |
+| `extraArgs` | `string[]` | `[]` | Extra browser launch args |
+| `textMode` | `boolean` | `false` | Text-only mode |
+| `backend` | `BrowserBackend` | `{ kind: "playwright" }` | Browser backend |
+| `verbose` | `boolean` | `false` | Enable verbose logging |
+
+## CrawlerRunConfig
+
+Controls per-crawl behavior. Pass to `crawl()` or `crawlMany()`.
+
+```typescript
+import { createCrawlerRunConfig, CacheMode } from "feedstock";
+
+const config = createCrawlerRunConfig({
+  cacheMode: CacheMode.Bypass,
+  waitFor: { kind: "selector", value: "#loaded" },
+  screenshot: true,
+  excludeTags: ["nav", "footer", "aside"],
+  cssSelector: "article",
+});
+```
+
+### Content Options
+
+| Option | Type | Default | Description |
+|--------|------|---------|-------------|
+| `wordCountThreshold` | `number` | `10` | Min words for content |
+| `excludeTags` | `string[]` | `[]` | HTML tags to strip |
+| `includeTags` | `string[]` | `[]` | Only keep these tags |
+| `removeOverlayElements` | `boolean` | `false` | Remove modals/popups |
+| `cssSelector` | `string \| null` | `null` | Extract only matching elements |
+| `generateMarkdown` | `boolean` | `true` | Generate markdown output |
+
+### Browser Behavior
+
+| Option | Type | Default | Description |
+|--------|------|---------|-------------|
+| `jsCode` | `string \| string[] \| null` | `null` | JavaScript to execute |
+| `waitFor` | `WaitForType \| null` | `null` | Wait condition |
+| `waitAfterLoad` | `number` | `0` | Additional wait (ms) |
+| `pageTimeout` | `number` | `60000` | Navigation timeout (ms) |
+
+### Wait Conditions
+
+```typescript
+// Wait for a CSS selector
+{ kind: "selector", value: "#content", timeout: 5000 }
+
+// Wait for network idle
+{ kind: "networkIdle" }
+
+// Wait a fixed delay
+{ kind: "delay", ms: 2000 }
+
+// Wait for a JS function to return truthy
+{ kind: "function", fn: "() => document.readyState === 'complete'" }
+```
+
+### Capture Options
+
+| Option | Type | Default | Description |
+|--------|------|---------|-------------|
+| `screenshot` | `boolean` | `false` | Capture full-page screenshot |
+| `pdf` | `boolean` | `false` | Capture page as PDF |
+| `captureNetworkRequests` | `boolean` | `false` | Log network requests |
+| `captureConsoleMessages` | `boolean` | `false` | Log console output |
