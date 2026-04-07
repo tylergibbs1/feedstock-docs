@@ -1,0 +1,82 @@
+---
+title: Metadata Extraction
+description: Extract 50+ metadata fields from crawled pages.
+---
+
+Feedstock extracts comprehensive metadata from every crawled page, covering standard meta tags, Open Graph, Twitter Cards, Dublin Core, JSON-LD, and more.
+
+## What's Extracted
+
+Every `CrawlResult` includes a `metadata` object. Here's the full set of fields:
+
+### Standard Meta
+
+| Field | Source |
+|-------|--------|
+| `title` | `<title>` |
+| `description` | `<meta name="description">` |
+| `keywords` | `<meta name="keywords">` |
+| `author` | `<meta name="author">` |
+| `generator` | `<meta name="generator">` |
+| `viewport` | `<meta name="viewport">` |
+| `themeColor` | `<meta name="theme-color">` |
+| `robots` | `<meta name="robots">` |
+| `googlebot` | `<meta name="googlebot">` |
+| `language` | `<html lang>` or `<meta http-equiv="content-language">` |
+| `charset` | `<meta charset>` |
+| `referrer` | `<meta name="referrer">` |
+
+### Open Graph (Full)
+
+`ogTitle`, `ogDescription`, `ogImage`, `ogImageWidth`, `ogImageHeight`, `ogImageAlt`, `ogUrl`, `ogType`, `ogSiteName`, `ogLocale`, `ogVideo`, `ogAudio`
+
+### Twitter Card
+
+`twitterCard`, `twitterSite`, `twitterCreator`, `twitterTitle`, `twitterDescription`, `twitterImage`, `twitterImageAlt`
+
+### Article
+
+`articlePublishedTime`, `articleModifiedTime`, `articleAuthor`, `articleSection`, `articleTags` (array)
+
+### Dublin Core
+
+`dcTitle`, `dcCreator`, `dcSubject`, `dcDescription`, `dcDate`, `dcType`, `dcLanguage`
+
+### Structured Data
+
+| Field | Description |
+|-------|-------------|
+| `jsonLd` | Array of parsed `<script type="application/ld+json">` objects |
+| `canonical` | `<link rel="canonical">` |
+| `amphtml` | `<link rel="amphtml">` |
+| `alternates` | Array of `{ href, hreflang?, type? }` from `<link rel="alternate">` |
+| `feeds` | Array of `{ href, type, title? }` from RSS/Atom links |
+| `favicons` | Array of `{ href, sizes?, type? }` from icon links |
+
+### Misc
+
+`publishedTime`, `modifiedTime`, `contentType`, `xUaCompatible`
+
+## Usage
+
+```typescript
+const result = await crawler.crawl("https://example.com");
+
+console.log(result.metadata?.title);
+console.log(result.metadata?.ogImage);
+console.log(result.metadata?.articleTags);
+console.log(result.metadata?.jsonLd);
+```
+
+## Direct Usage
+
+```typescript
+import { extractMetadata } from "feedstock";
+
+const meta = extractMetadata(html);
+// Only non-null fields are included
+```
+
+<Callout type="info">
+Null values are automatically stripped from the metadata object. If a field isn't present in the HTML, it won't appear in the result.
+</Callout>

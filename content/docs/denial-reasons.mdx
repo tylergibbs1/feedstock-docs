@@ -1,0 +1,78 @@
+---
+title: Filter Denial Reasons
+description: Track why URLs were rejected during deep crawling.
+---
+
+Filters now track *why* each URL was rejected, not just that it was. This helps debug crawl coverage issues and understand filter behavior.
+
+## Getting Denial Reasons
+
+### Per-Filter
+
+```typescript
+const filter = new DomainFilter({ allowed: ["example.com"] });
+const result = await filter.applyWithReason("https://other.com/page");
+
+console.log(result);
+// {
+//   allowed: false,
+//   reason: 'Domain "other.com" is not in allowed list',
+//   filter: "domain"
+// }
+```
+
+### From FilterChain
+
+```typescript
+const chain = new FilterChain()
+  .add(new DomainFilter({ allowed: ["example.com"] }))
+  .add(new URLPatternFilter({ exclude: [/\/admin/] }))
+  .add(new ContentTypeFilter());
+
+// Crawl with this chain...
+await chain.apply("https://other.com/page");       // denied: domain
+await chain.apply("https://example.com/admin");     // denied: pattern
+await chain.apply("https://example.com/file.pdf");  // denied: content-type
+await chain.apply("https://example.com/docs");      // allowed
+
+// Get all denials
+const denials = chain.getDenials();
+// [
+//   { url: "https://other.com/page", reason: 'Domain "other.com" is not in allowed list', filter: "domain" },
+//   { url: "https://example.com/admin", reason: "Matched exclude pattern: \\/admin", filter: "url-pattern" },
+//   { url: "https://example.com/file.pdf", reason: 'File extension ".pdf" is blocked', filter: "content-type" },
+// ]
+
+// Group by filter
+const byFilter = chain.getDenialsByFilter();
+// { "domain": [...], "url-pattern": [...], "content-type": [...] }
+```
+
+## Denial Reasons by Filter
+
+| Filter | Example Reasons |
+|--------|----------------|
+| **URLPatternFilter** | `Matched exclude pattern: \/admin`, `Did not match any include pattern` |
+| **DomainFilter** | `Domain "other.com" is not in allowed list`, `Domain "ads.com" is blocked` |
+| **ContentTypeFilter** | `File extension ".pdf" is blocked`, `File extension ".xyz" is not in allowed list` |
+| **MaxDepthFilter** | `Depth 4 exceeds max depth 3` |
+
+## Backward Compatibility
+
+The existing `apply()` method still returns a boolean. Use `applyWithReason()` when you need the reason:
+
+```typescript
+// Old API — still works
+const allowed = await filter.apply(url); // boolean
+
+// New API — with reason
+const result = await filter.applyWithReason(url); // { allowed, reason?, filter? }
+```
+
+The `FilterChain.apply()` now tracks denials internally even when returning boolean, so you can always call `getDenials()` afterward.
+
+## Clearing Denials
+
+```typescript
+chain.clearDenials();
+```

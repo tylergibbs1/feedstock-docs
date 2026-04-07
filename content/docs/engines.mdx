@@ -1,0 +1,103 @@
+---
+title: Engine System
+description: Fetch-first engine fallback for faster crawling.
+---
+
+Feedstock uses a multi-engine system that tries the cheapest fetching method first and only escalates to a full browser when needed.
+
+## How It Works
+
+```
+Request → FetchEngine (HTTP) → success? → done
+                              ↓ fail/SPA shell detected
+                         PlaywrightEngine (browser) → done
+```
+
+1. **FetchEngine** sends a simple HTTP request (no browser). Fast, lightweight, works for static pages.
+2. If the page returns an SPA shell (empty `<div id="root">`, Next.js/Nuxt markers), the engine manager **auto-escalates** to Playwright.
+3. **PlaywrightEngine** launches a full browser for JS rendering, screenshots, PDFs, etc.
+
+## Default Behavior
+
+The engine system is enabled by default. Every `WebCrawler` instance starts with fetch-first:
+
+```typescript
+const crawler = new WebCrawler(); // fetch-first enabled
+```
+
+For simple static pages, this is significantly faster since no browser is launched.
+
+## Configuration
+
+```typescript
+const crawler = new WebCrawler({
+  useEngines: true,  // default
+  engineConfig: {
+    fetchFirst: true,    // try HTTP fetch before browser (default)
+    autoEscalate: true,  // auto-switch to browser for SPA shells (default)
+  },
+});
+```
+
+### Disable Engines
+
+To always use Playwright (legacy behavior):
+
+```typescript
+const crawler = new WebCrawler({ useEngines: false });
+```
+
+## When Fetch Skips to Browser
+
+The engine manager goes straight to Playwright when your config requires browser features:
+
+- `jsCode` — custom JavaScript execution
+- `screenshot` or `pdf` — visual capture
+- `waitFor` with `selector` or `function` — DOM-dependent waiting
+- `captureNetworkRequests` or `captureConsoleMessages`
+
+For these cases, FetchEngine's `canHandle()` returns false and it's skipped.
+
+## SPA Detection
+
+The `likelyNeedsJavaScript()` function checks for:
+
+- Empty or near-empty `<body>` (< 50 chars of text after stripping scripts/tags)
+- React root: `<div id="root"></div>`
+- Next.js: `<div id="__next">` or `window.__NEXT_DATA__`
+- Nuxt: `<div id="__nuxt">` or `window.__NUXT__`
+
+## Engine Quality Scores
+
+| Engine | Quality Score | Cost |
+|--------|:---:|------|
+| FetchEngine | 5 | Cheapest — simple HTTP |
+| PlaywrightEngine | 50 | Full browser automation |
+
+Lower quality score = tried first. Engines are sorted cheapest-first.
+
+## Custom Engines
+
+Extend the `Engine` base class:
+
+```typescript
+import { Engine, type EngineCapabilities } from "feedstock";
+
+class MyCustomEngine extends Engine {
+  readonly name = "custom";
+  readonly quality = 25; // between fetch and playwright
+  readonly capabilities: EngineCapabilities = {
+    javascript: true,
+    screenshot: false,
+    pdf: false,
+    networkRequests: false,
+    consoleMessages: false,
+    waitConditions: false,
+    customJs: false,
+  };
+
+  async start() { /* ... */ }
+  async close() { /* ... */ }
+  async fetch(url, config) { /* ... */ }
+}
+```
