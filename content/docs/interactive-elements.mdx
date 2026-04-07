@@ -1,0 +1,53 @@
+---
+title: Interactive Elements
+description: Detect all clickable and interactive elements on a page.
+---
+
+The interactive element detector finds every clickable/interactive element on a page — including those without ARIA roles, like JS onclick handlers and cursor:pointer styled elements.
+
+## Usage
+
+```typescript
+import { detectInteractiveElements } from "feedstock";
+
+// Requires a Playwright Page object
+crawler.setHook("beforeReturnHtml", async (page) => {
+  const elements = await detectInteractiveElements(page);
+  
+  for (const el of elements) {
+    console.log(`${el.tag} "${el.text}" (${el.role ?? el.type ?? "clickable"})`);
+    // a "About Us" (link)
+    // button "Submit" (button)
+    // div "Click me" (clickable)
+    // input "" (email)
+  }
+});
+```
+
+## What's Detected
+
+1. **Standard interactive elements**: `<a>`, `<button>`, `<input>`, `<textarea>`, `<select>`
+2. **ARIA roles**: `[role="button"]`, `[role="link"]`, `[role="tab"]`, etc.
+3. **Tabindex elements**: `[tabindex]`
+4. **Contenteditable**: `[contenteditable="true"]`
+5. **Cursor-pointer CSS**: Elements with `cursor: pointer` (catches styled divs/spans with JS handlers)
+6. **onclick handlers**: Elements with `onclick` attribute
+
+## Element Shape
+
+```typescript
+interface InteractiveElement {
+  tag: string;       // "a", "button", "div", etc.
+  text: string;      // visible text (truncated to 100 chars)
+  href: string | null;  // for links
+  role: string | null;  // ARIA role if present
+  type: string | null;  // input type if present
+  selector: string;  // CSS selector for targeting
+}
+```
+
+## Deduplication
+
+- Elements found via multiple selectors are only reported once
+- Inherited `cursor: pointer` from parents is excluded (only the actual interactive element is reported)
+- Hidden elements (`offsetParent === null`) are excluded

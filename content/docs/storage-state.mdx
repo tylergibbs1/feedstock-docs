@@ -1,0 +1,53 @@
+---
+title: Storage State
+description: Persist cookies and localStorage between crawler sessions.
+---
+
+Save and restore browser state (cookies, localStorage) between crawler sessions. Useful for crawling authenticated pages without re-logging in.
+
+## Save State
+
+```typescript
+import { saveStorageState } from "feedstock";
+
+// After logging in via hooks or JS execution
+crawler.setHook("afterGoto", async (page) => {
+  const context = page.context();
+  await saveStorageState(context);
+  // Saved to ~/.feedstock/storage/state.json
+});
+```
+
+## Load State
+
+```typescript
+import { loadStorageState, getStorageStatePath } from "feedstock";
+
+const state = loadStorageState();
+if (state) {
+  console.log(`${state.cookies.length} cookies from ${new Date(state.savedAt)}`);
+}
+
+// Or get the path for Playwright context creation
+const path = getStorageStatePath();
+// Use with Playwright's storageState option
+```
+
+## Custom Path
+
+```typescript
+await saveStorageState(context, "/path/to/my-state.json");
+const state = loadStorageState("/path/to/my-state.json");
+```
+
+## What's Saved
+
+```typescript
+interface StorageState {
+  cookies: CookieData[];     // all cookies across domains
+  origins: OriginStorage[];  // localStorage per origin
+  savedAt: number;           // timestamp
+}
+```
+
+Default location: `~/.feedstock/storage/state.json`

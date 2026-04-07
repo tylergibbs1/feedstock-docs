@@ -1,0 +1,47 @@
+---
+title: Error Messages
+description: AI-friendly error conversion for actionable diagnostics.
+---
+
+Feedstock automatically converts cryptic browser and network errors into clear, actionable messages.
+
+## Automatic Conversion
+
+When a crawl fails, the error message is automatically converted:
+
+```typescript
+const result = await crawler.crawl("https://nonexistent.example.com");
+console.log(result.errorMessage);
+// "DNS resolution failed. The domain does not exist or DNS is unreachable."
+// Instead of: "net::ERR_NAME_NOT_RESOLVED at navigating to..."
+```
+
+## Error Patterns
+
+| Raw Error | Friendly Message |
+|-----------|-----------------|
+| `net::ERR_NAME_NOT_RESOLVED` | DNS resolution failed. The domain does not exist or DNS is unreachable. |
+| `net::ERR_CONNECTION_REFUSED` | Connection refused. The server is not running or is blocking connections. |
+| `Timeout 30000ms exceeded` | Connection timed out. Try increasing pageTimeout. |
+| `net::ERR_SSL_PROTOCOL_ERROR` | SSL/TLS error. Try setting ignoreHttpsErrors: true. |
+| `net::ERR_TOO_MANY_REDIRECTS` | Too many redirects. The page is stuck in a redirect loop. |
+| `element is not visible` | Element exists but is not visible. |
+| `element click intercepted` | Another element is covering the target (modal/popup). |
+| `waiting for selector` | Timed out waiting for element. Wrong selector or page not loaded. |
+| `browser has been closed` | Browser closed unexpectedly. Process may have crashed. |
+| `ECONNREFUSED` | Connection refused. No server listening. |
+| `ENOTFOUND` | Domain not found. Check URL for typos. |
+
+## Direct Usage
+
+```typescript
+import { toFriendlyError, withFriendlyErrors } from "feedstock";
+
+// Convert an error
+const message = toFriendlyError(new Error("net::ERR_CONNECTION_REFUSED"));
+
+// Wrap a function
+const result = await withFriendlyErrors(() => riskyOperation());
+```
+
+Unknown errors are passed through with common noise stripped (stack traces, "Error:" prefix).

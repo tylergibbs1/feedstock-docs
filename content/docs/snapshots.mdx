@@ -1,0 +1,95 @@
+---
+title: Accessibility Snapshots
+description: Compact semantic page representations for AI consumption.
+---
+
+Snapshots extract a compact, semantic representation of a page — headings, links, buttons, inputs, images — with deterministic `@e` refs. Orders of magnitude smaller than raw HTML.
+
+## Usage
+
+```typescript
+const result = await crawler.crawl("https://example.com", {
+  snapshot: true,
+});
+
+console.log(result.snapshot);
+// @e1 [heading] "Example Domain" [level=1]
+// [paragraph] "This domain is for use in illustrative examples..."
+// @e2 [link] "More information..." [-> https://www.iana.org/domains/example]
+```
+
+## Why Snapshots?
+
+| Format | Size | AI-friendly | Structure |
+|--------|------|:-----------:|-----------|
+| Raw HTML | ~50KB | No | Full DOM noise |
+| Cleaned HTML | ~10KB | Somewhat | Less noise |
+| Markdown | ~5KB | Yes | Flat text |
+| **Snapshot** | **~1KB** | **Yes** | **Semantic tree** |
+
+Snapshots are what AI browser agents (Anthropic computer use, OpenAI tools, agent-browser) converge on for page understanding.
+
+## Static vs CDP Snapshots
+
+### Static (default)
+
+Works with any engine (including FetchEngine). Parses HTML with Cheerio to extract semantic elements:
+
+```typescript
+import { buildStaticSnapshot } from "feedstock";
+
+const snap = buildStaticSnapshot(html);
+console.log(snap.text);     // formatted text tree
+console.log(snap.tree);     // structured SnapshotNode[]
+console.log(snap.refs);     // Map<string, { role, name }>
+console.log(snap.nodeCount); // total refs assigned
+```
+
+### CDP (browser-only)
+
+Uses Chrome's `Accessibility.getFullAXTree` for a more precise tree. Requires Playwright engine:
+
+```typescript
+import { takeSnapshot } from "feedstock";
+
+// page is a Playwright Page object
+const snap = await takeSnapshot(page, {
+  interactiveOnly: false,
+  maxDepth: 10,
+});
+```
+
+## Node Categories
+
+| Category | Roles | Gets ref? |
+|----------|-------|:---------:|
+| **Interactive** | button, link, textbox, checkbox, radio, combobox, tab, switch, slider | Always |
+| **Content** | heading, paragraph, img, article, region, navigation | If named |
+| **Structural** | generic, group, list | Filtered out |
+
+## Reference System
+
+Each interactive or named content node gets a deterministic ref (`@e1`, `@e2`, ...):
+
+```
+@e1 [heading] "Welcome" [level=1]
+@e2 [link] "About" [-> /about]
+@e3 [button] "Sign Up"
+@e4 [textbox] "Email" 
+@e5 [checkbox] [checked=false]
+```
+
+The refs map lets you look up any element:
+
+```typescript
+snap.refs.get("e3"); // { role: "button", name: "Sign Up" }
+```
+
+## With processHtml
+
+Snapshots work on raw HTML without a browser:
+
+```typescript
+const result = await crawler.processHtml(html, { snapshot: true });
+console.log(result.snapshot);
+```
