@@ -1,0 +1,50 @@
+---
+title: URL Seeder
+description: Discover URLs from sitemaps for crawl planning.
+---
+
+The `URLSeeder` discovers URLs from a domain's sitemap, following the robots.txt → sitemap.xml chain.
+
+## Usage
+
+```typescript
+import { URLSeeder } from "feedstock";
+
+const seeder = new URLSeeder();
+const { urls, sitemaps } = await seeder.seed("example.com");
+
+console.log(`Found ${urls.length} URLs from ${sitemaps.length} sitemaps`);
+
+// Feed discovered URLs into the crawler
+const results = await crawler.crawlMany(urls.slice(0, 100));
+```
+
+## How It Works
+
+1. Fetches `robots.txt` to find `Sitemap:` directives
+2. Falls back to `https://domain/sitemap.xml` if none found
+3. Parses sitemap XML, extracting `<url><loc>` entries
+4. Follows `<sitemap><loc>` entries for sitemap indexes (recursive)
+5. Handles gzipped sitemaps (`.xml.gz`)
+
+## Configuration
+
+```typescript
+const seeder = new URLSeeder({
+  timeout: 15_000,        // request timeout (default)
+  userAgent: "feedstock",  // user agent string (default)
+});
+```
+
+## Combining with Deep Crawl
+
+Use the seeder to discover starting points, then deep crawl from each:
+
+```typescript
+const { urls } = await seeder.seed("docs.example.com");
+
+for (const startUrl of urls.filter(u => u.endsWith("/index.html"))) {
+  const results = await crawler.deepCrawl(startUrl, {}, { maxDepth: 1 });
+  // Process results...
+}
+```

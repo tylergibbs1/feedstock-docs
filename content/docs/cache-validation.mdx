@@ -1,0 +1,44 @@
+---
+title: Cache Validation
+description: Smart cache freshness checking via HTTP HEAD requests.
+---
+
+The `CacheValidator` checks whether cached content is still fresh by sending HTTP HEAD requests and comparing ETag/Last-Modified headers.
+
+## Usage
+
+```typescript
+import { CacheValidator } from "feedstock";
+
+const validator = new CacheValidator({ timeout: 10_000 });
+
+const result = await validator.validate(
+  "https://example.com/page",
+  cachedEtag,        // from previous response
+  cachedLastModified, // from previous response
+);
+
+if (result.fresh) {
+  // Cache is still valid, use cached content
+} else {
+  // Content has changed, re-crawl
+}
+```
+
+## How It Works
+
+1. Sends a `HEAD` request with `If-None-Match` (ETag) and `If-Modified-Since` headers
+2. If the server responds with `304 Not Modified`, the cache is fresh
+3. Otherwise, new ETag/Last-Modified values are returned for the next validation
+
+## Result
+
+```typescript
+interface CacheValidationResult {
+  fresh: boolean;            // true if cache is still valid
+  etag: string | null;       // new or existing ETag
+  lastModified: string | null; // new or existing Last-Modified
+}
+```
+
+Network errors are treated as stale (returns `fresh: false`) to be safe.

@@ -1,0 +1,74 @@
+---
+title: Crawler Monitor
+description: Track real-time crawl statistics.
+---
+
+The `CrawlerMonitor` tracks crawl progress including page counts, timing, data volume, and success rates.
+
+## Usage
+
+```typescript
+import { CrawlerMonitor } from "feedstock";
+
+const monitor = new CrawlerMonitor();
+monitor.start();
+
+// Track each page
+monitor.recordPageStart("https://example.com/page1");
+// ... crawl ...
+monitor.recordPageComplete({
+  success: true,
+  fromCache: false,
+  responseTimeMs: 150,
+  bytesDownloaded: 45_000,
+});
+
+// Get stats
+const stats = monitor.getStats();
+console.log(stats.pagesTotal);     // 1
+console.log(stats.pagesPerSecond); // ~6.67
+console.log(stats.avgResponseTime); // 150
+
+// Human-readable summary
+console.log(monitor.formatStats());
+// Pages: 1 (1 ok, 0 failed, 0 cached)
+// Time: 0.2s | 6.7 pages/s | avg 150ms/page
+// Downloaded: 0.04 MB
+```
+
+## Stats Object
+
+```typescript
+interface CrawlStats {
+  startTime: number;
+  pagesTotal: number;
+  pagesSuccess: number;
+  pagesFailed: number;
+  pagesFromCache: number;
+  bytesDownloaded: number;
+  avgResponseTime: number;
+  currentUrl: string | null;
+  elapsedMs: number;
+  pagesPerSecond: number;
+}
+```
+
+## Integration Example
+
+```typescript
+const monitor = new CrawlerMonitor();
+monitor.start();
+
+for await (const result of crawler.deepCrawlStream(startUrl, {}, config)) {
+  monitor.recordPageComplete({
+    success: result.success,
+    fromCache: result.cacheStatus === "hit",
+    responseTimeMs: 0,
+    bytesDownloaded: result.html.length,
+  });
+
+  if (monitor.getStats().pagesTotal % 10 === 0) {
+    console.log(monitor.formatStats());
+  }
+}
+```

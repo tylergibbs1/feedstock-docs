@@ -1,0 +1,66 @@
+---
+title: Anti-Bot Detection
+description: Detect blocked pages, simulate human behavior, and auto-retry.
+---
+
+Feedstock includes utilities for detecting anti-bot blocks, simulating human behavior, and retrying blocked requests.
+
+## Detecting Blocks
+
+```typescript
+import { isBlocked } from "feedstock";
+
+if (isBlocked(result.html, result.statusCode ?? 200)) {
+  console.log("Page is blocked by anti-bot measures");
+}
+```
+
+Detects common patterns: Cloudflare challenges, CAPTCHAs, 403/429/503 with block indicators, short blocked bodies.
+
+## Stealth Mode
+
+Apply anti-detection measures to a Playwright page:
+
+```typescript
+import { applyStealthMode } from "feedstock";
+
+crawler.setHook("onPageCreated", async (page) => {
+  await applyStealthMode(page);
+});
+```
+
+Stealth mode overrides:
+- `navigator.webdriver` (set to `false`)
+- Chrome runtime properties
+- Navigator plugins and languages
+- Permission query responses
+
+## User Simulation
+
+Simulate human-like mouse movements and scrolling:
+
+```typescript
+import { simulateUser } from "feedstock";
+
+crawler.setHook("afterGoto", async (page) => {
+  await simulateUser(page);
+});
+```
+
+## Auto-Retry
+
+Wrap any operation with automatic retry on block detection:
+
+```typescript
+import { withRetry } from "feedstock";
+
+const { result, retries } = await withRetry(
+  () => crawler.crawl(url),
+  (result) => isBlocked(result.html, result.statusCode ?? 200),
+  { maxRetries: 3, retryDelay: 2000 },
+);
+
+console.log(`Got result after ${retries} retries`);
+```
+
+Retry delay increases linearly: `retryDelay * (attempt + 1)`.

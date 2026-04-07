@@ -1,0 +1,76 @@
+---
+title: Chunking
+description: Split content into segments for extraction pipelines.
+---
+
+Chunking strategies split text into bounded segments, useful for feeding content into extraction pipelines or processing large pages in parts.
+
+## Strategies
+
+### IdentityChunking
+
+Returns the entire text as a single chunk (no splitting).
+
+```typescript
+import { IdentityChunking } from "feedstock";
+
+const chunks = new IdentityChunking().chunk("Full text here");
+// ["Full text here"]
+```
+
+### RegexChunking
+
+Splits by regex patterns. Defaults to splitting on double newlines (paragraphs).
+
+```typescript
+import { RegexChunking } from "feedstock";
+
+const chunks = new RegexChunking().chunk("Para 1\n\nPara 2\n\nPara 3");
+// ["Para 1", "Para 2", "Para 3"]
+
+// Custom separator
+const chunks = new RegexChunking([/---/]).chunk("A---B---C");
+// ["A", "B", "C"]
+```
+
+### SlidingWindowChunking
+
+Splits by word count with overlap between windows.
+
+```typescript
+import { SlidingWindowChunking } from "feedstock";
+
+const chunker = new SlidingWindowChunking(
+  500,  // words per window
+  50,   // overlap words
+);
+const chunks = chunker.chunk(longText);
+```
+
+### FixedSizeChunking
+
+Splits by character count with overlap.
+
+```typescript
+import { FixedSizeChunking } from "feedstock";
+
+const chunker = new FixedSizeChunking(
+  2000, // characters per chunk
+  200,  // overlap characters
+);
+const chunks = chunker.chunk(longText);
+```
+
+## Custom Strategy
+
+Extend `ChunkingStrategy`:
+
+```typescript
+import { ChunkingStrategy } from "feedstock";
+
+class SentenceChunking extends ChunkingStrategy {
+  chunk(text: string): string[] {
+    return text.split(/(?<=[.!?])\s+/);
+  }
+}
+```

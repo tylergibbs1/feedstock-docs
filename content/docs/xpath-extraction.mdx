@@ -1,0 +1,57 @@
+---
+title: XPath Extraction
+description: Extract structured data using XPath-like selectors.
+---
+
+The `XPathExtractionStrategy` uses XPath-like expressions converted to CSS selectors for structured extraction.
+
+## Usage
+
+```typescript
+import { XPathExtractionStrategy } from "feedstock";
+
+const strategy = new XPathExtractionStrategy({
+  name: "products",
+  baseXPath: "//div[@class='product']",
+  fields: [
+    { name: "title", xpath: ".//h2", type: "text" },
+    { name: "price", xpath: ".//span[@class='price']", type: "text" },
+    { name: "url", xpath: ".//a", type: "attribute", attribute: "href" },
+  ],
+});
+
+const items = await strategy.extract(url, html);
+```
+
+## Supported XPath Patterns
+
+| XPath | Converted To | Description |
+|-------|-------------|-------------|
+| `//div` | `div` | Any descendant |
+| `.//h2` | `h2` | Descendant of current |
+| `div/span` | `div > span` | Direct child |
+| `[@class='x']` | `[class="x"]` | Attribute match |
+| `[@href]` | `[href]` | Attribute exists |
+| `[contains(@class,'x')]` | `[class*="x"]` | Attribute contains |
+| `[1]` | `:nth-of-type(1)` | Position |
+
+## Schema
+
+```typescript
+interface XPathExtractionSchema {
+  name: string;
+  baseXPath: string;    // selector for repeating elements
+  fields: XPathField[];
+}
+
+interface XPathField {
+  name: string;
+  xpath: string;
+  type: "text" | "attribute" | "html";
+  attribute?: string;   // for "attribute" type
+}
+```
+
+<Callout type="info">
+This strategy converts XPath to CSS selectors under the hood using Cheerio. Complex XPath features like axes (`ancestor::`, `following-sibling::`) are not supported. For those cases, use CSS extraction directly.
+</Callout>

@@ -1,0 +1,61 @@
+---
+title: Content Filters
+description: Remove low-quality or irrelevant content from scraped pages.
+---
+
+Content filters post-process scraped text to remove noise and keep only relevant content.
+
+## PruningContentFilter
+
+Rule-based filter that removes short blocks, boilerplate, and low-quality patterns.
+
+```typescript
+import { PruningContentFilter } from "feedstock";
+
+const filter = new PruningContentFilter({
+  minWords: 5,  // blocks with fewer words are removed
+});
+
+const cleaned = filter.filter(rawContent);
+```
+
+Automatically removes blocks matching patterns like:
+- "Share", "Tweet", "Subscribe", "Sign up"
+- "Copyright", "All rights reserved"
+- "Advertisement", "Sponsored"
+- "Loading", "Please wait"
+
+## BM25ContentFilter
+
+Relevance-based filter using BM25 scoring. Keeps blocks that are relevant to a search query.
+
+```typescript
+import { BM25ContentFilter } from "feedstock";
+
+const filter = new BM25ContentFilter({
+  k1: 1.5,        // term frequency saturation
+  b: 0.75,         // document length normalization
+  threshold: 0.1,  // minimum relevance score (0-1)
+});
+
+const relevant = filter.filter(content, "TypeScript web crawler");
+```
+
+Returns only content blocks that score above the threshold for the given query. Falls back to the full content if nothing matches.
+
+## Custom Filter
+
+Extend `ContentFilterStrategy`:
+
+```typescript
+import { ContentFilterStrategy } from "feedstock";
+
+class LanguageFilter extends ContentFilterStrategy {
+  filter(content: string, query?: string): string {
+    // Keep only English-looking blocks
+    return content.split("\n\n")
+      .filter(block => /^[a-zA-Z\s.,!?]+$/.test(block))
+      .join("\n\n");
+  }
+}
+```

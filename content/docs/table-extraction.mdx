@@ -1,0 +1,64 @@
+---
+title: Table Extraction
+description: Extract HTML tables into structured data.
+---
+
+The `TableExtractionStrategy` parses HTML tables into structured objects with headers, rows, and captions.
+
+## Usage
+
+```typescript
+import { TableExtractionStrategy } from "feedstock";
+
+const strategy = new TableExtractionStrategy();
+const tables = await strategy.extract(url, html);
+
+for (const table of tables) {
+  const data = JSON.parse(table.content);
+  console.log("Headers:", data.headers);
+  console.log("Rows:", data.rows);
+  console.log("Caption:", data.caption);
+}
+```
+
+## Output Format
+
+```typescript
+{
+  headers: ["Name", "Age", "City"],
+  rows: [
+    ["Alice", "30", "New York"],
+    ["Bob", "25", "San Francisco"],
+  ],
+  caption: "User Data",     // from <caption> element
+  rowCount: 2,
+  columnCount: 3,
+}
+```
+
+## Options
+
+```typescript
+new TableExtractionStrategy({
+  minRows: 2,           // skip tables with fewer rows (default: 1)
+  includeCaption: true,  // extract <caption> text (default: true)
+})
+```
+
+## With Crawler
+
+```typescript
+const result = await crawler.crawl("https://example.com/data", {
+  extractionStrategy: {
+    type: "css",  // or use TableExtractionStrategy directly via processHtml
+    params: { ... },
+  },
+});
+```
+
+For direct table extraction, use `processHtml`:
+
+```typescript
+const strategy = new TableExtractionStrategy({ minRows: 2 });
+const tables = await strategy.extract(result.url, result.cleanedHtml!);
+```

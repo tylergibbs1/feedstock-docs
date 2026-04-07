@@ -1,0 +1,42 @@
+---
+title: Proxy Rotation
+description: Rotate through a pool of proxies with health tracking.
+---
+
+The `ProxyRotationStrategy` cycles through a list of proxies in round-robin order, automatically skipping unhealthy ones.
+
+## Usage
+
+```typescript
+import { ProxyRotationStrategy } from "feedstock";
+
+const rotation = new ProxyRotationStrategy([
+  { server: "http://proxy1:8080" },
+  { server: "http://proxy2:8080", username: "user", password: "pass" },
+  { server: "http://proxy3:8080" },
+]);
+
+// Get next proxy
+const proxy = rotation.getProxy();
+// Use it in your crawler config...
+
+// Report result
+rotation.reportResult(proxy, true);  // success
+rotation.reportResult(proxy, false); // failure
+```
+
+## Health Tracking
+
+After `maxFailures` consecutive failures, a proxy is marked unhealthy and skipped. It automatically recovers after `recoveryInterval` milliseconds.
+
+```typescript
+const rotation = new ProxyRotationStrategy(proxies, {
+  maxFailures: 3,         // mark unhealthy after 3 fails (default)
+  recoveryInterval: 60000, // retry after 60s (default)
+});
+
+console.log(rotation.healthyCount); // 3
+console.log(rotation.totalCount);   // 3
+```
+
+If all proxies are unhealthy, the one with the fewest failures is used as fallback.
