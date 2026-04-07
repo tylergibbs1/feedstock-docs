@@ -1,0 +1,109 @@
+---
+title: Changelog
+description: Release history for feedstock
+---
+
+## v0.1.0
+
+**Initial release — full-featured web crawler for TypeScript/Bun**
+
+### Core Crawling
+- `WebCrawler` with `crawl()`, `crawlMany()`, `processHtml()` methods
+- `BrowserConfig` and `CrawlerRunConfig` with typed defaults
+- Concurrent crawling with configurable concurrency limit
+- Context manager pattern with `start()`/`close()` lifecycle
+
+### Engine System
+- **Fetch-first architecture**: tries lightweight HTTP fetch before launching a browser
+- `FetchEngine` (quality 5) — simple HTTP, no browser overhead
+- `PlaywrightEngine` (quality 50) — full Chromium/Firefox/WebKit
+- Auto-escalation: detects SPA shells (React, Next.js, Nuxt) and switches to browser
+- `EngineManager` with quality-scored engine selection
+
+### Browser Backends
+- **Playwright** — Chromium, Firefox, WebKit
+- **Lightpanda** — local mode via `@lightpanda/browser`, cloud mode via CDP WebSocket
+
+### Content Processing
+- HTML cleaning via Cheerio (strips scripts, styles, noise tags)
+- Link extraction with internal/external classification
+- Media extraction (images, videos, audio) with quality scoring
+- **Rich metadata extraction** — 50+ fields: Open Graph, Twitter Cards, Dublin Core, JSON-LD, article tags, favicons, feeds, alternates
+- Markdown generation via Turndown with citation support
+- Accessibility tree snapshots — compact semantic page representation with `@e` refs
+
+### Extraction Strategies
+- **CSS selector extraction** — map selectors to JSON fields
+- **Regex extraction** — pattern matching with named capture groups
+- **XPath extraction** — XPath-to-CSS conversion
+- **Table extraction** — structured headers, rows, captions
+
+### Deep Crawling
+- **BFS** (Breadth-First Search) — level-by-level with concurrent batching
+- **DFS** (Depth-First Search) — single-path depth exploration
+- **BestFirst** — score-based priority queue using composite scorers
+- Streaming mode via `deepCrawlStream()` async generator
+- `maxDepth`, `maxPages`, `concurrency` controls
+
+### URL Filtering
+- `URLPatternFilter` — glob/regex include/exclude patterns
+- `DomainFilter` — whitelist/blacklist domains
+- `ContentTypeFilter` — extension-based filtering
+- `MaxDepthFilter` — depth limit per URL
+- `FilterChain` — composable, short-circuit evaluation
+- **Denial reasons** — track why each URL was rejected with `getDenials()` / `getDenialsByFilter()`
+
+### URL Scoring
+- `KeywordRelevanceScorer` — match keywords in URL and anchor text
+- `PathDepthScorer` — shallower paths score higher
+- `FreshnessScorer` — URLs with recent dates score higher
+- `DomainAuthorityScorer` — preferred domains score highest
+- `CompositeScorer` — weighted averaging of multiple scorers
+
+### Caching
+- SQLite-based cache via `bun:sqlite` with WAL mode
+- 5 cache modes: Enabled, Disabled, ReadOnly, WriteOnly, Bypass
+- `CacheValidator` — HTTP HEAD requests with ETag/Last-Modified
+- Batch insert via `setMany()` (atomic transactions)
+
+### Rate Limiting & Compliance
+- Per-domain rate limiter with exponential backoff on 429/503
+- Gradual recovery on success
+- Configurable jitter, max delay, backoff/recovery factors
+- **Robots.txt parser** — User-agent matching, Allow/Disallow, Crawl-delay, Sitemap discovery, wildcard patterns
+
+### Anti-Bot
+- `isBlocked()` — detects Cloudflare challenges, CAPTCHAs, 403/429/503 blocks
+- `applyStealthMode()` — overrides navigator.webdriver, plugins, languages
+- `simulateUser()` — random mouse movements and scrolling
+- `withRetry()` — automatic retry with escalating delays
+
+### Content Filtering
+- `PruningContentFilter` — rule-based boilerplate removal
+- `BM25ContentFilter` — relevance-based filtering by query
+
+### Chunking
+- `RegexChunking` — split by patterns (default: paragraphs)
+- `SlidingWindowChunking` — word-count windows with overlap
+- `FixedSizeChunking` — character-count chunks with overlap
+- `IdentityChunking` — no splitting
+
+### Browser Utilities
+- **Interactive element detection** — finds all clickable elements including cursor:pointer, onclick, tabindex
+- **Iframe content inlining** — extracts and merges iframe content into parent HTML
+- **Storage state persistence** — save/load cookies and localStorage between sessions
+- **Hooks** — onPageCreated, beforeGoto, afterGoto, onExecutionStarted, beforeReturnHtml
+
+### Infrastructure
+- **Proxy rotation** — round-robin with health tracking and auto-recovery
+- **URL seeder** — sitemap discovery via robots.txt chain
+- **Crawler monitor** — real-time stats (pages/sec, success rates, data volume)
+- **AI-friendly errors** — converts 20+ error patterns into actionable messages
+- **Logging** — ConsoleLogger with level filtering, SilentLogger, pluggable Logger interface
+
+### Developer Experience
+- Native TypeScript execution via Bun (no build step)
+- 260 tests via `bun:test`
+- Biome for linting and formatting
+- GitHub Actions CI
+- Apache-2.0 license
