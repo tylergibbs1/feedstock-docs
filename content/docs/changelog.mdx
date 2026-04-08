@@ -3,6 +3,16 @@ title: Changelog
 description: Release history for feedstock
 ---
 
+## v0.1.5
+
+**Built-in stealth mode**
+
+- **`stealth: true`** on `BrowserConfig` — one flag enables random user-agents (9 realistic browser UAs), `navigator.webdriver` override, Chrome runtime spoofing, plugin/language spoofing via `addInitScript`
+- **`simulateUser: true`** on `CrawlerRunConfig` — automatically runs random mouse movements and scrolling after navigation. No manual hooks needed.
+- Stealth is applied at context creation, so every page in the session gets it automatically
+
+---
+
 ## v0.1.4
 
 **Production hardening**
