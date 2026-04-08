@@ -3,6 +3,28 @@ title: Changelog
 description: Release history for feedstock
 ---
 
+## v0.1.3
+
+**Performance optimizations and Playwright-native features**
+
+### Performance
+- **HTMLRewriter streaming extraction** — links, media, and metadata extracted via Bun's native streaming parser instead of Cheerio DOM. Zero DOM allocation for the extraction path.
+- **`scrapeAll()` single-pass** — reduced Cheerio parses from 4x to 1x per page
+- **BM25 frequency maps** — O(1) term lookup via pre-computed frequency maps and Sets
+- **Static cheerio import** — removed dynamic `require()` in snapshot module
+- **Batch `pathToRegex`** — single regex replace instead of char-by-char loop (-10 lines)
+- **Simplified engine selection** — removed dead code in `selectEngines` (-6 lines)
+- **LCS hash-based default** — lowered DP threshold to 10K for faster diffs on large pages
+
+### New Features
+- **`blockResources`** — abort images, CSS, fonts, and media during browser crawls via `context.route()`. Can cut page load 50-80%.
+- **`navigationWaitUntil`** — configurable navigation strategy: `"commit"` (fastest), `"domcontentloaded"` (default), `"load"`, `"networkidle"`
+- **`extractInPage()`** — extract links/media/metadata directly inside the browser via `page.evaluate()`, eliminating HTML serialization round-trip
+- **`extractAllStreaming()`** — Bun HTMLRewriter-based extraction as a standalone function
+- **Service worker blocking** — `serviceWorkers: 'block'` on every browser context ensures route interception works on all sites
+
+---
+
 ## v0.1.2
 
 **Change tracking and dogfood validation**

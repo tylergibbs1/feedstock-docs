@@ -1,0 +1,66 @@
+---
+title: In-Page Extraction
+description: Extract data directly inside the browser, skipping HTML serialization.
+---
+
+`extractInPage()` runs a single `page.evaluate()` call to extract links, media, and metadata directly inside the browser context. This eliminates the HTML→string→parse round-trip that normally happens when using Cheerio or HTMLRewriter.
+
+## When to Use
+
+| Approach | How | Best for |
+|----------|-----|----------|
+| **HTMLRewriter** (default) | Parse HTML string with Bun's streaming parser | FetchEngine, processHtml |
+| **Cheerio** | Parse HTML string into DOM tree | CSS/XPath extraction strategies |
+| **extractInPage** | Run JS inside browser page | Playwright engine, JS-rendered content |
+
+Use `extractInPage` when:
+- Content is rendered by JavaScript (SPAs)
+- You need the browser's resolved URLs (relative→absolute)
+- You want to avoid the HTML serialization overhead
+
+## Usage
+
+```typescript
+import { extractInPage } from "feedstock";
+
+crawler.setHook("beforeReturnHtml", async (page) => {
+  const data = await extractInPage(page);
+
+  console.log(`${data.links.internal.length} internal links`);
+  console.log(`${data.links.external.length} external links`);
+  console.log(`${data.media.images.length} images`);
+  console.log(`Title: ${data.metadata.title}`);
+});
+```
+
+## What's Extracted
+
+### Links
+Internal and external links with `href`, `text`, `title`, and `baseDomain`. URLs are already resolved to absolute by the browser.
+
+### Media
+Images with `src`, `alt`, `width`, `score`, and `format`. Videos and audio sources.
+
+### Metadata
+`title`, `description`, `keywords`, `author`, `language`, Open Graph fields (`ogTitle`, `ogImage`, `ogUrl`, `ogType`, `ogSiteName`), `canonical`, and JSON-LD structured data.
+
+## Result Type
+
+```typescript
+interface InPageExtractionResult {
+  links: {
+    internal: LinkData[];
+    external: LinkData[];
+  };
+  media: {
+    images: MediaData[];
+    videos: MediaData[];
+    audios: MediaData[];
+  };
+  metadata: Record<string, unknown>;
+}
+```
+
+<Callout type="info">
+`extractInPage` requires a Playwright `Page` object. It does not work with the FetchEngine or `processHtml`. For those, use `scrapeAll` or `extractAllStreaming` instead.
+</Callout>

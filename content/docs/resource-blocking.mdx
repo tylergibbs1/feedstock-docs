@@ -1,0 +1,60 @@
+---
+title: Resource Blocking
+description: Block images, CSS, fonts, and media for faster content-only crawls.
+---
+
+Enable `blockResources` to abort unnecessary network requests during crawling. This can cut page load time by 50-80% for content-only crawls.
+
+## Usage
+
+```typescript
+const result = await crawler.crawl("https://example.com", {
+  blockResources: true,
+});
+```
+
+## What's Blocked
+
+When `blockResources` is enabled:
+
+| Resource | Blocked |
+|----------|:-------:|
+| Images (png, jpg, gif, webp, avif, svg, ico) | Yes |
+| Stylesheets (CSS) | Yes |
+| Fonts (woff, woff2, ttf, eot) | Yes |
+| Media (mp4, mp3, avi, mov) | Yes |
+| JavaScript | No |
+| HTML documents | No |
+| XHR/Fetch API calls | No |
+
+## How It Works
+
+Resource blocking uses Playwright's `context.route()` to intercept and abort matching requests at the browser context level. This is more efficient than page-level routing when reusing sessions.
+
+Service workers are also blocked (`serviceWorkers: 'block'` on every context) to ensure route interception works on sites that use service workers for caching.
+
+## Combine with Navigation Strategy
+
+For maximum speed, pair with `navigationWaitUntil: "commit"`:
+
+```typescript
+const result = await crawler.crawl("https://example.com", {
+  blockResources: true,
+  navigationWaitUntil: "domcontentloaded", // or "commit" for fastest
+});
+```
+
+<Callout type="warn">
+`blockResources` only works with the Playwright engine. The FetchEngine makes a single HTTP request and doesn't load sub-resources regardless.
+</Callout>
+
+## Deep Crawl with Resource Blocking
+
+```typescript
+const results = await crawler.deepCrawl("https://example.com", {
+  blockResources: true,
+}, {
+  maxDepth: 3,
+  maxPages: 100,
+});
+```

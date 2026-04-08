@@ -1,0 +1,70 @@
+---
+title: Navigation Strategies
+description: Control when navigation is considered complete.
+---
+
+The `navigationWaitUntil` option controls when Playwright considers a page navigation to be finished. Choosing the right strategy can significantly impact crawl speed.
+
+## Options
+
+| Strategy | Speed | Description |
+|----------|:-----:|-------------|
+| `"commit"` | Fastest | Returns as soon as the server responds (HTTP headers received). Page may not be fully parsed. |
+| `"domcontentloaded"` | Fast | Default. Waits for the `DOMContentLoaded` event — HTML is parsed, but stylesheets/images may still be loading. |
+| `"load"` | Moderate | Waits for the `load` event — all resources (images, stylesheets) have finished loading. |
+| `"networkidle"` | Slowest | Waits until there are no more than 0 network connections for 500ms. Best for SPAs. |
+
+## Usage
+
+```typescript
+const result = await crawler.crawl("https://example.com", {
+  navigationWaitUntil: "commit", // fastest
+});
+```
+
+## When to Use Each
+
+### `"commit"` — Maximum speed
+Best for: static sites, bulk content crawling, when you only need the HTML.
+
+```typescript
+// Content-only crawl — don't wait for anything extra
+await crawler.crawl(url, {
+  blockResources: true,
+  navigationWaitUntil: "commit",
+});
+```
+
+### `"domcontentloaded"` — Default
+Best for: most crawls. HTML is fully parsed and available.
+
+### `"load"` — Full page
+Best for: when you need images loaded (screenshot capture, image extraction with dimensions).
+
+```typescript
+await crawler.crawl(url, {
+  screenshot: true,
+  navigationWaitUntil: "load",
+});
+```
+
+### `"networkidle"` — SPAs
+Best for: JavaScript-heavy single-page apps that load content via API calls.
+
+```typescript
+await crawler.crawl(url, {
+  navigationWaitUntil: "networkidle",
+});
+```
+
+## With Deep Crawling
+
+```typescript
+const results = await crawler.deepCrawl(url, {
+  blockResources: true,
+  navigationWaitUntil: "commit",
+}, {
+  maxDepth: 3,
+  maxPages: 500,
+});
+```
