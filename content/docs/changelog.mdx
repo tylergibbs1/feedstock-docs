@@ -3,6 +3,22 @@ title: Changelog
 description: Release history for feedstock
 ---
 
+## v0.1.4
+
+**Production hardening**
+
+- **Input validation** — `crawl()`, `crawlMany()`, `deepCrawl()` validate URLs upfront with friendly error messages
+- **FetchEngine retry** — retries transient network errors (ECONNRESET, ETIMEDOUT) up to 2 times with backoff
+- **Session limits** — `BrowserManager` caps at 20 concurrent sessions with LRU eviction
+- **Cache pruning** — `cache.pruneOlderThan(ms)` and `cache.size` for TTL-based cleanup
+- **Graceful shutdown** — SIGINT/SIGTERM handlers auto-close browser on process exit
+- **User-agent rotation** — `UserAgentRotator` with 9 realistic browser user-agents, `getRandomUserAgent()`
+- **Static interactive detection** — `detectInteractiveElementsStatic()` works without browser for `processHtml`
+- **`processHtml` wired** — `detectInteractiveElements` config option now works on raw HTML
+- **prepublishOnly** — typecheck + lint + unit tests run before every `npm publish`
+
+---
+
 ## v0.1.3
 
 **Performance optimizations and Playwright-native features**
