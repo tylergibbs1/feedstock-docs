@@ -3,6 +3,17 @@ title: Changelog
 description: Release history for feedstock
 ---
 
+## v0.1.6
+
+**Auto-escalation on anti-bot blocks**
+
+- **Auto-escalate on 403/429/503** — when FetchEngine gets a blocked response (Cloudflare challenge, "Access Denied", rate limit), automatically escalates to PlaywrightEngine with stealth. No manual `withRetry()` needed.
+- **`autoEscalateOnBlock`** config option on `EngineManager` (default: true). Disable with `{ autoEscalateOnBlock: false }`.
+- **SPA detection scoped to 2xx responses** — prevents false escalation on error pages with short bodies.
+- 7 new unit tests for escalation logic (403, 429, 503, disable flag, fallback without browser, SPA + block sequence).
+
+---
+
 ## v0.1.5
 
 **Built-in stealth mode**
