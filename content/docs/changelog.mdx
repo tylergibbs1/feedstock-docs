@@ -3,6 +3,63 @@ title: Changelog
 description: Release history for feedstock
 ---
 
+## v0.3.0
+
+**Bun-native performance**
+
+- **Gzip-compressed cache** — cached HTML is now compressed with `Bun.gzipSync()` before storage, cutting cache DB size by 5-10x. Backward compatible with uncompressed legacy data.
+- **`Bun.hash()` content hashing** — replaced SHA-256 with wyhash via `Bun.hash()` for ~10-50x faster change detection. Non-cryptographic, ideal for cache invalidation.
+- **`Bun.sleep()`** — replaced `setTimeout` promise pattern in 5 locations (retry, rate limiter, anti-bot, CDP readiness polling) with native `Bun.sleep()`.
+- **`Bun.file()` / `Bun.write()`** — storage state persistence now uses Bun-native file I/O instead of `node:fs`. `loadStorageState` and `getStorageStatePath` are now async.
+- **`Bun.env`** — config loader uses `Bun.env` instead of `process.env`.
+- **`MonitorDashboard`** — new `Bun.serve()`-powered live monitoring server. HTTP JSON API (`/stats`, `/health`) and WebSocket (`/ws`) for real-time crawl stats.
+- 349 tests (24 new), 148 dogfood checks passing.
+
+---
+
+## v0.2.0
+
+**Agent-browser patterns**
+
+Patterns inspired by [vercel-labs/agent-browser](https://github.com/vercel-labs/agent-browser):
+
+### New browser backends
+- **Generic CDP backend** — `{ kind: "cdp", wsUrl: "..." }` connects to any cloud browser provider (Browserbase, Browserless, etc.) via `chromium.connectOverCDP()`
+- **Connection resilience** — `BrowserManager.start()` retries transient errors (ECONNREFUSED, ETIMEDOUT, WebSocket errors) with exponential backoff (default 3 retries, 500ms base, 30s cap)
+- **Lightpanda CDP readiness polling** — polls `/json/version` endpoint before connecting, preventing race conditions on slow starts
+- **Failed start cleanup** — kills leaked Lightpanda processes and partial browser connections between retry attempts
+
+### New extraction & detection
+- **`AccessibilityExtractionStrategy`** — extracts semantic content (headings, links, buttons, inputs, images) using the static Cheerio snapshot builder. Filterable by role, works without a live browser.
+- **`detectCursorInteractiveElements()`** — finds hidden interactive elements via `page.evaluate()` (cursor:pointer, onclick, tabindex, contenteditable, ARIA roles)
+
+### Incremental crawling
+- **Content hashing in cache** — `contentHash()` and `cache.hasChanged()` for detecting unchanged pages
+- **Schema migration** — existing cache databases automatically gain the `content_hash` column via `ALTER TABLE`
+- **Crawler integration** — `crawler.crawl()` now stores content hash on every cache write
+
+### Resource blocking profiles
+- **Named profiles** — `"fast"` (images/fonts/media), `"minimal"` (everything except HTML/JS), `"media-only"` (images/video/audio)
+- **Custom config** — `{ patterns: ["**/*.woff2"], resourceTypes: ["font"] }`
+- **Backward compatible** — `blockResources: true` maps to `"fast"` profile
+- **Environment variable** — `FEEDSTOCK_BLOCK_RESOURCES=fast`
+
+### Layered configuration
+- **`feedstock.json`** project config file (searches cwd and parent directories)
+- **`FEEDSTOCK_*` environment variables** — `FEEDSTOCK_CDP_URL`, `FEEDSTOCK_HEADLESS`, `FEEDSTOCK_PROXY`, `FEEDSTOCK_BLOCK_RESOURCES`, `FEEDSTOCK_PAGE_TIMEOUT`, and more
+- **`loadConfig()`** — merges all layers with precedence: programmatic > env vars > project file > defaults
+
+### Benchmarking
+- **Benchmark suite** (`benchmarks/bench.ts`) — 6 scenarios: cache write (100/1000), read, hasChanged, contentHash (10kb/100kb)
+- Warmup iterations, p50/stddev/min/max stats, `--json` output, name filtering
+
+### Testing
+- 325 tests (92 new), including regression suite for config defaults, cache operations, extraction strategies, snapshot structure, and model factories
+- Schema migration tested against old-format SQLite databases
+- Resource blocker tested with mock BrowserContext
+
+---
+
 ## v0.1.6
 
 **Auto-escalation on anti-bot blocks**
