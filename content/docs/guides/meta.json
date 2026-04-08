@@ -4,6 +4,10 @@
   "pages": [
     "scrape-products",
     "site-crawler",
-    "screenshot-capture"
+    "screenshot-capture",
+    "stealth-ecommerce",
+    "documentation-crawler",
+    "ai-data-pipeline",
+    "cloud-browsers"
   ]
 }

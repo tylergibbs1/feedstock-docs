@@ -1,0 +1,276 @@
+---
+title: Use Cloud Browser Providers
+description: Connect feedstock to Browserbase, Browserless, or any CDP-compatible cloud browser service.
+---
+
+This guide shows how to use feedstock with cloud browser providers instead of launching a local browser. Cloud browsers are useful for serverless deployments, CI pipelines, or when you need browsers in specific geographic regions.
+
+## The Goal
+
+Connect feedstock to a remote browser via the Chrome DevTools Protocol (CDP) WebSocket URL. We cover Browserbase, Browserless, and generic CDP endpoints, plus configuration via environment variables and `feedstock.json`.
+
+## How CDP Works in Feedstock
+
+Feedstock supports a `cdp` backend that connects to any browser exposing a CDP WebSocket endpoint. Instead of launching a local Chromium process, feedstock attaches to the remote browser and drives it through Playwright's CDP connection.
+
+```typescript
+import { WebCrawler, createBrowserConfig } from "feedstock";
+
+const crawler = new WebCrawler({
+  config: createBrowserConfig({
+    backend: { kind: "cdp", wsUrl: "wss://your-provider.example.com/ws" },
+  }),
+});
+```
+
+All feedstock features work over CDP: screenshots, PDFs, JavaScript execution, wait conditions, stealth mode, and accessibility snapshots.
+
+<Callout type="info">
+The CDP backend connects to an already-running browser. Proxy configuration, browser arguments, and viewport settings must be configured on the provider side. The `proxy`, `extraArgs`, and `browserType` options in `BrowserConfig` are ignored when using CDP.
+</Callout>
+
+## Browserbase
+
+[Browserbase](https://www.browserbase.com/) provides managed headless browsers with built-in stealth, proxy networks, and session recording.
+
+```typescript
+import { WebCrawler, createBrowserConfig } from "feedstock";
+
+const crawler = new WebCrawler({
+  config: createBrowserConfig({
+    backend: {
+      kind: "cdp",
+      wsUrl: `wss://connect.browserbase.com?apiKey=${process.env.BROWSERBASE_API_KEY}`,
+    },
+  }),
+});
+
+const result = await crawler.crawl("https://example.com", {
+  generateMarkdown: true,
+  screenshot: true,
+});
+
+console.log(result.markdown?.rawMarkdown);
+await crawler.close();
+```
+
+<Callout type="warn">
+Browserbase sessions have a default timeout. For long-running deep crawls, check your plan's session duration limit and configure the provider accordingly.
+</Callout>
+
+## Browserless
+
+[Browserless](https://www.browserless.io/) offers a hosted Chrome API with a WebSocket endpoint.
+
+```typescript
+import { WebCrawler, createBrowserConfig } from "feedstock";
+
+const crawler = new WebCrawler({
+  config: createBrowserConfig({
+    backend: {
+      kind: "cdp",
+      wsUrl: `wss://chrome.browserless.io?token=${process.env.BROWSERLESS_TOKEN}`,
+    },
+  }),
+});
+
+const result = await crawler.crawl("https://example.com");
+await crawler.close();
+```
+
+For self-hosted Browserless (e.g., running in Docker):
+
+```typescript
+const crawler = new WebCrawler({
+  config: createBrowserConfig({
+    backend: {
+      kind: "cdp",
+      wsUrl: "ws://localhost:3000",
+    },
+  }),
+});
+```
+
+## Generic CDP WebSocket
+
+Any browser that exposes a CDP WebSocket works with feedstock. This includes:
+
+- Chrome/Chromium launched with `--remote-debugging-port`
+- Selenium Grid with CDP support
+- Custom browser pools
+
+```typescript
+// Connect to a local Chrome with remote debugging
+const crawler = new WebCrawler({
+  config: createBrowserConfig({
+    backend: {
+      kind: "cdp",
+      wsUrl: "ws://127.0.0.1:9222/devtools/browser/BROWSER_ID",
+    },
+  }),
+});
+```
+
+To launch Chrome with remote debugging locally for testing:
+
+```bash
+chromium --headless --remote-debugging-port=9222
+```
+
+Then connect with feedstock using `ws://127.0.0.1:9222`.
+
+## Configure via Environment Variables
+
+Set `FEEDSTOCK_CDP_URL` to configure the CDP backend without changing code. Feedstock's config loader reads this automatically:
+
+```bash
+export FEEDSTOCK_CDP_URL="wss://connect.browserbase.com?apiKey=your-key"
+```
+
+Then your code needs no backend configuration at all:
+
+```typescript
+import { WebCrawler, loadConfig, createBrowserConfig } from "feedstock";
+
+const config = loadConfig();
+
+const crawler = new WebCrawler({
+  config: createBrowserConfig(config.browser),
+});
+
+// Uses the CDP backend from FEEDSTOCK_CDP_URL automatically
+const result = await crawler.crawl("https://example.com");
+await crawler.close();
+```
+
+Other useful environment variables:
+
+| Variable | Effect |
+|----------|--------|
+| `FEEDSTOCK_CDP_URL` | Sets `backend: { kind: "cdp", wsUrl: "..." }` |
+| `FEEDSTOCK_HEADLESS` | `"true"` or `"false"` |
+| `FEEDSTOCK_STEALTH` | Enable stealth mode (`"true"`) |
+| `FEEDSTOCK_PROXY` | Proxy server URL |
+| `FEEDSTOCK_PROXY_USERNAME` | Proxy auth username |
+| `FEEDSTOCK_PROXY_PASSWORD` | Proxy auth password |
+| `FEEDSTOCK_BLOCK_RESOURCES` | `"true"`, `"false"`, or a profile name |
+| `FEEDSTOCK_PAGE_TIMEOUT` | Page timeout in milliseconds |
+
+## Configure via feedstock.json
+
+For project-level configuration, create a `feedstock.json` file in your project root. Feedstock searches for this file starting from the current directory and walking up:
+
+```json
+{
+  "browser": {
+    "backend": {
+      "kind": "cdp",
+      "wsUrl": "wss://connect.browserbase.com?apiKey=YOUR_KEY"
+    },
+    "stealth": true
+  },
+  "crawl": {
+    "blockResources": "fast",
+    "generateMarkdown": true,
+    "pageTimeout": 30000
+  }
+}
+```
+
+Then load it with `loadConfig()`:
+
+```typescript
+import { WebCrawler, loadConfig, createBrowserConfig, createCrawlerRunConfig } from "feedstock";
+
+const config = loadConfig();
+
+const crawler = new WebCrawler({
+  config: createBrowserConfig(config.browser),
+});
+
+const result = await crawler.crawl("https://example.com", createCrawlerRunConfig(config.crawl));
+await crawler.close();
+```
+
+## Layered Configuration
+
+Configuration layers are applied in this order (highest precedence wins):
+
+1. **Programmatic overrides** -- values passed directly to `createBrowserConfig()` / `createCrawlerRunConfig()`
+2. **Environment variables** -- `FEEDSTOCK_*` variables
+3. **Project config file** -- `feedstock.json`
+4. **Built-in defaults**
+
+This means you can set a default CDP URL in `feedstock.json`, override it per-environment with `FEEDSTOCK_CDP_URL`, and still override specific settings in code:
+
+```typescript
+const config = loadConfig();
+
+// feedstock.json sets CDP backend, env var overrides the URL,
+// and we add stealth mode programmatically
+const crawler = new WebCrawler({
+  config: createBrowserConfig({
+    ...config.browser,
+    stealth: true, // programmatic override wins
+  }),
+});
+```
+
+## Full Working Example
+
+A complete script that uses Browserbase in production and falls back to local Playwright in development:
+
+```typescript
+import {
+  WebCrawler,
+  createBrowserConfig,
+  loadConfig,
+  CacheMode,
+} from "feedstock";
+
+// Load layered config (feedstock.json + env vars)
+const config = loadConfig();
+
+// In production, FEEDSTOCK_CDP_URL is set; locally it is not
+const isCloud = !!process.env.FEEDSTOCK_CDP_URL;
+
+const crawler = new WebCrawler({
+  config: createBrowserConfig({
+    ...config.browser,
+    // Local dev: use stealth + headless Playwright
+    // Cloud: stealth is handled by the provider
+    stealth: !isCloud,
+  }),
+  verbose: true,
+});
+
+const urls = [
+  "https://example.com/page-1",
+  "https://example.com/page-2",
+  "https://example.com/page-3",
+];
+
+const results = await crawler.crawlMany(
+  urls,
+  {
+    cacheMode: CacheMode.Enabled,
+    generateMarkdown: true,
+    blockResources: "fast",
+  },
+  { concurrency: isCloud ? 5 : 2 },
+);
+
+for (const result of results) {
+  if (result.success) {
+    console.log(`${result.url}: ${result.markdown?.rawMarkdown.length} chars`);
+  } else {
+    console.error(`${result.url}: ${result.errorMessage}`);
+  }
+}
+
+await crawler.close();
+```
+
+<Callout type="info">
+Cloud browser providers charge per session or per minute. Use `CacheMode.Enabled` aggressively to avoid re-fetching pages you have already crawled. The cache is local to your machine, so cloud browser time is only used for cache misses.
+</Callout>

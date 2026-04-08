@@ -1,31 +1,112 @@
 ---
 title: Resource Blocking
-description: Block images, CSS, fonts, and media for faster content-only crawls.
+description: Block images, CSS, fonts, and media for faster content-only crawls using named profiles or custom rules.
 ---
 
 Enable `blockResources` to abort unnecessary network requests during crawling. This can cut page load time by 50-80% for content-only crawls.
 
-## Usage
+## Quick Start
 
 ```typescript
 const result = await crawler.crawl("https://example.com", {
-  blockResources: true,
+  blockResources: "fast",
+});
+```
+
+## Named Profiles
+
+Feedstock ships with three built-in profiles that cover the most common use cases.
+
+### `"fast"` — Images, Fonts & Media
+
+Blocks heavy assets while keeping CSS and JavaScript intact. Best for general-purpose crawling where you still need the page to render correctly.
+
+```typescript
+const result = await crawler.crawl("https://example.com", {
+  blockResources: "fast",
+});
+```
+
+### `"minimal"` — Everything Except HTML & JS
+
+The most aggressive profile. Blocks stylesheets, images, fonts, media, and all other sub-resources. Only HTML documents and JavaScript are allowed through.
+
+```typescript
+const result = await crawler.crawl("https://example.com", {
+  blockResources: "minimal",
+});
+```
+
+### `"media-only"` — Images, Video & Audio
+
+A lighter profile that only blocks images, video, and audio. CSS, fonts, and JavaScript all load normally.
+
+```typescript
+const result = await crawler.crawl("https://example.com", {
+  blockResources: "media-only",
 });
 ```
 
 ## What's Blocked
 
-When `blockResources` is enabled:
+| Resource | `"fast"` | `"minimal"` | `"media-only"` |
+|----------|:--------:|:-----------:|:---------------:|
+| Images (png, jpg, gif, webp, avif, svg, ico) | Blocked | Blocked | Blocked |
+| Stylesheets (CSS) | — | Blocked | — |
+| Fonts (woff, woff2, ttf, eot) | Blocked | Blocked | — |
+| Media (mp4, mp3, avi, mov) | Blocked | Blocked | Blocked |
+| JavaScript | — | — | — |
+| HTML documents | — | — | — |
+| XHR/Fetch API calls | — | Blocked | — |
 
-| Resource | Blocked |
-|----------|:-------:|
-| Images (png, jpg, gif, webp, avif, svg, ico) | Yes |
-| Stylesheets (CSS) | Yes |
-| Fonts (woff, woff2, ttf, eot) | Yes |
-| Media (mp4, mp3, avi, mov) | Yes |
-| JavaScript | No |
-| HTML documents | No |
-| XHR/Fetch API calls | No |
+## Custom Config
+
+For fine-grained control, pass an object with `patterns` and/or `resourceTypes`:
+
+```typescript
+const result = await crawler.crawl("https://example.com", {
+  blockResources: {
+    patterns: ["**/*.woff2", "**/*.gif", "**/ads/**"],
+    resourceTypes: ["font", "image"],
+  },
+});
+```
+
+- **`patterns`** — glob patterns matched against the request URL.
+- **`resourceTypes`** — Playwright [resource types](https://playwright.dev/docs/api/class-request#request-resource-type) to block (e.g. `"image"`, `"stylesheet"`, `"font"`, `"media"`, `"fetch"`, `"xhr"`).
+
+Both fields are optional. When both are provided, a request is blocked if it matches **either** a pattern or a resource type.
+
+## Backward Compatibility
+
+Passing `true` still works and maps to the `"fast"` profile:
+
+```typescript
+// These are equivalent
+blockResources: true
+blockResources: "fast"
+```
+
+<Callout type="info">
+If you were previously using `blockResources: true`, behavior is unchanged — the `"fast"` profile blocks the same resource types that the boolean `true` always blocked.
+</Callout>
+
+## Environment Variable
+
+Set the profile via the `FEEDSTOCK_BLOCK_RESOURCES` environment variable:
+
+```bash
+# Use a named profile
+FEEDSTOCK_BLOCK_RESOURCES=fast bun run crawl.ts
+
+# Other profiles
+FEEDSTOCK_BLOCK_RESOURCES=minimal bun run crawl.ts
+FEEDSTOCK_BLOCK_RESOURCES=media-only bun run crawl.ts
+```
+
+<Callout type="warn">
+The environment variable only supports named profiles (`fast`, `minimal`, `media-only`) and the value `true`. For custom patterns and resource types, use the config object in code.
+</Callout>
 
 ## How It Works
 
@@ -39,7 +120,7 @@ For maximum speed, pair with `navigationWaitUntil: "commit"`:
 
 ```typescript
 const result = await crawler.crawl("https://example.com", {
-  blockResources: true,
+  blockResources: "minimal",
   navigationWaitUntil: "domcontentloaded", // or "commit" for fastest
 });
 ```
@@ -52,7 +133,7 @@ const result = await crawler.crawl("https://example.com", {
 
 ```typescript
 const results = await crawler.deepCrawl("https://example.com", {
-  blockResources: true,
+  blockResources: "fast",
 }, {
   maxDepth: 3,
   maxPages: 100,

@@ -1,0 +1,258 @@
+---
+title: Crawl a Documentation Site
+description: Deep crawl an entire docs site fast using the fetch engine, resource blocking, streaming results, and caching.
+---
+
+This guide shows how to crawl a full documentation site efficiently -- hundreds or thousands of pages -- using feedstock's deep crawl system with performance tuning for static content.
+
+## The Goal
+
+Given a documentation site like `https://docs.example.com`, crawl every page, generate markdown for each, respect rate limits, stream results as they arrive, and use caching so incremental re-crawls only fetch what changed.
+
+## Step 1: Use the Fetch Engine
+
+Documentation pages are almost always static HTML. The fetch engine skips browser launch entirely and makes plain HTTP requests, which is an order of magnitude faster than Playwright.
+
+The engine system is enabled by default. When `useEngines` is true (the default), feedstock tries a lightweight HTTP fetch first and only launches a browser if the page needs JavaScript rendering.
+
+```typescript
+import { WebCrawler } from "feedstock";
+
+const crawler = new WebCrawler({
+  useEngines: true,  // default -- fetch engine tried first
+  verbose: true,
+});
+```
+
+<Callout type="info">
+The fetch engine cannot execute JavaScript, take screenshots, or wait for selectors. If a page requires JS rendering, feedstock automatically falls back to the Playwright engine. You do not need to handle this yourself.
+</Callout>
+
+## Step 2: Block Unnecessary Resources
+
+Even when the fetch engine handles most pages, some may fall back to Playwright. Use the `"minimal"` resource blocking profile to block fonts, images, stylesheets, and media -- keeping only the HTML and essential scripts:
+
+```typescript
+const crawlConfig = {
+  blockResources: "minimal" as const,
+  generateMarkdown: true,
+};
+```
+
+The available profiles are:
+
+| Profile | Blocks |
+|---------|--------|
+| `"fast"` | Images, fonts, media |
+| `"minimal"` | Images, fonts, media, stylesheets |
+| `"media-only"` | Only large media (video, audio) |
+
+## Step 3: Use Fast Navigation
+
+Set `navigationWaitUntil` to `"commit"` for the fastest possible page load. This returns as soon as the server responds with the first byte, rather than waiting for DOMContentLoaded or all resources to finish loading:
+
+```typescript
+const crawlConfig = {
+  blockResources: "minimal" as const,
+  navigationWaitUntil: "commit" as const,
+  generateMarkdown: true,
+};
+```
+
+<Callout type="warn">
+The `"commit"` strategy works well for server-rendered documentation. For SPAs or pages that load content via JavaScript after the initial response, use `"domcontentloaded"` (the default) or `"networkidle"` instead.
+</Callout>
+
+## Step 4: Configure the Deep Crawl
+
+Use `deepCrawl` with BFS (breadth-first search, the default) and a `DomainFilter` to stay within the docs domain:
+
+```typescript
+import {
+  WebCrawler,
+  DomainFilter,
+  ContentTypeFilter,
+  FilterChain,
+  RateLimiter,
+  CacheMode,
+} from "feedstock";
+
+const crawler = new WebCrawler({ verbose: true });
+
+const filterChain = new FilterChain([
+  new DomainFilter({ allowed: ["docs.example.com"] }),
+  new ContentTypeFilter(), // blocks images, PDFs, zip files, etc.
+]);
+
+const rateLimiter = new RateLimiter({
+  baseDelay: 200,   // 200ms between requests to same domain
+  maxDelay: 30_000, // max backoff on 429/503
+});
+
+const results = await crawler.deepCrawl(
+  "https://docs.example.com",
+  {
+    cacheMode: CacheMode.Enabled,
+    blockResources: "minimal",
+    navigationWaitUntil: "commit",
+    generateMarkdown: true,
+  },
+  {
+    maxDepth: 5,
+    maxPages: 500,
+    concurrency: 10,
+    filterChain,
+    rateLimiter,
+  },
+);
+
+console.log(`Crawled ${results.length} pages`);
+await crawler.close();
+```
+
+The `DomainFilter` ensures the crawler does not follow external links. The `ContentTypeFilter` uses default settings to skip URLs ending in `.pdf`, `.jpg`, `.zip`, and other non-HTML extensions.
+
+## Step 5: Stream Results
+
+For large sites, use `deepCrawlStream` to process pages as they arrive rather than waiting for the entire crawl to finish:
+
+```typescript
+let count = 0;
+
+for await (const result of crawler.deepCrawlStream(
+  "https://docs.example.com",
+  {
+    cacheMode: CacheMode.Enabled,
+    blockResources: "minimal",
+    navigationWaitUntil: "commit",
+    generateMarkdown: true,
+  },
+  {
+    maxDepth: 5,
+    maxPages: 500,
+    concurrency: 10,
+    filterChain,
+    rateLimiter,
+  },
+)) {
+  count++;
+
+  if (result.success && result.markdown) {
+    // Write each page's markdown to disk as it arrives
+    const slug = new URL(result.url).pathname.replace(/\//g, "_").replace(/^_/, "");
+    await Bun.write(`./output/${slug}.md`, result.markdown.rawMarkdown);
+  }
+
+  if (count % 50 === 0) {
+    console.log(`Progress: ${count} pages crawled`);
+  }
+}
+
+console.log(`Done: ${count} pages total`);
+await crawler.close();
+```
+
+## Step 6: Use Caching for Incremental Updates
+
+With `CacheMode.Enabled` (the default), feedstock caches every crawl result in a local SQLite database. On subsequent runs, cached pages are returned instantly without making a network request.
+
+To force a fresh crawl of everything, use `CacheMode.Bypass`:
+
+```typescript
+{ cacheMode: CacheMode.Bypass }
+```
+
+To refresh the cache while still writing new results for future runs, use `CacheMode.WriteOnly`:
+
+```typescript
+{ cacheMode: CacheMode.WriteOnly }
+```
+
+The available cache modes are:
+
+| Mode | Read cache? | Write cache? |
+|------|------------|-------------|
+| `Enabled` | Yes | Yes |
+| `ReadOnly` | Yes | No |
+| `WriteOnly` | No | Yes |
+| `Bypass` | No | No |
+
+## Full Working Example
+
+A complete incremental documentation crawler with streaming output:
+
+```typescript
+import {
+  WebCrawler,
+  CacheMode,
+  DomainFilter,
+  ContentTypeFilter,
+  FilterChain,
+  RateLimiter,
+  ConsoleLogger,
+} from "feedstock";
+
+const DOCS_URL = "https://docs.example.com";
+const DOMAIN = new URL(DOCS_URL).hostname;
+
+const crawler = new WebCrawler({
+  verbose: true,
+  useEngines: true,
+});
+
+const filterChain = new FilterChain([
+  new DomainFilter({ allowed: [DOMAIN] }),
+  new ContentTypeFilter(),
+]);
+
+const rateLimiter = new RateLimiter({
+  baseDelay: 200,
+  maxDelay: 30_000,
+});
+
+const pages: Array<{ url: string; title: string; markdown: string }> = [];
+
+for await (const result of crawler.deepCrawlStream(
+  DOCS_URL,
+  {
+    cacheMode: CacheMode.Enabled,
+    blockResources: "minimal",
+    navigationWaitUntil: "commit",
+    generateMarkdown: true,
+  },
+  {
+    maxDepth: 5,
+    maxPages: 1000,
+    concurrency: 10,
+    filterChain,
+    rateLimiter,
+  },
+)) {
+  if (!result.success) {
+    console.warn(`Failed: ${result.url} -- ${result.errorMessage}`);
+    continue;
+  }
+
+  const title = (result.metadata?.title as string) ?? result.url;
+  const markdown = result.markdown?.rawMarkdown ?? "";
+
+  pages.push({ url: result.url, title, markdown });
+
+  // Log cache status
+  if (result.cacheStatus === "hit") {
+    console.log(`[cache] ${title}`);
+  } else {
+    console.log(`[fetch] ${title}`);
+  }
+}
+
+// Write all pages to a single JSON file
+await Bun.write("./docs-output.json", JSON.stringify(pages, null, 2));
+console.log(`Crawled ${pages.length} documentation pages`);
+
+await crawler.close();
+```
+
+<Callout type="info">
+On re-runs with `CacheMode.Enabled`, cached pages return in under 1ms each. A 500-page docs site that took 2 minutes on the first run might complete in under 5 seconds on the second run if nothing changed.
+</Callout>

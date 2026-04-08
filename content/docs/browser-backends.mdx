@@ -1,9 +1,9 @@
 ---
 title: Browser Backends
-description: Use Playwright or Lightpanda for browser automation.
+description: Use Playwright, CDP, or Lightpanda for browser automation.
 ---
 
-Feedstock supports two browser backends, configured via the `backend` field in `BrowserConfig`.
+Feedstock supports three browser backends, configured via the `backend` field in `BrowserConfig`.
 
 ## Playwright (Default)
 
@@ -25,6 +25,27 @@ const crawler = new WebCrawler({
 bun add feedstock
 bunx playwright install chromium
 ```
+
+## Generic CDP
+
+Connect to any cloud browser provider — [Browserbase](https://browserbase.com), [Browserless](https://browserless.io), or any service that exposes a Chrome DevTools Protocol WebSocket endpoint.
+
+```typescript
+const crawler = new WebCrawler({
+  config: {
+    backend: {
+      kind: "cdp",
+      wsUrl: process.env.BROWSER_WS_URL!,
+    },
+  },
+});
+```
+
+Under the hood this calls `chromium.connectOverCDP(wsUrl)` from Playwright, so you get the same Playwright `Browser` object as every other backend.
+
+<Callout type="info">
+No browser binary is needed locally — the browser runs on the remote provider. You only need `playwright` installed as a dependency for the client library.
+</Callout>
 
 ## Lightpanda
 
@@ -74,12 +95,26 @@ const crawler = new WebCrawler({
 
 ## How It Works
 
-Both backends produce a standard Playwright `Browser` object. The rest of the pipeline (page navigation, content capture, scraping, extraction) works identically regardless of which backend you choose.
+All three backends produce a standard Playwright `Browser` object. The rest of the pipeline (page navigation, content capture, scraping, extraction) works identically regardless of which backend you choose.
 
 ```
 Playwright backend:  launcher.launch() → Browser
+Generic CDP:         chromium.connectOverCDP(wsUrl) → Browser
 Lightpanda local:    lightpanda.serve() → chromium.connectOverCDP() → Browser
 Lightpanda cloud:    chromium.connectOverCDP(wss://...) → Browser
 ```
 
 All session management, page lifecycle, and cleanup is handled by the `BrowserManager`.
+
+### Connection Resilience
+
+`BrowserManager.start()` retries on transient connection errors (ECONNREFUSED, ECONNRESET, ETIMEDOUT, EPIPE, WebSocket errors) with exponential backoff. By default it retries up to 3 times, starting at 500ms and doubling each attempt (capped at 30s). This is especially useful for CDP and Lightpanda Cloud backends where the remote endpoint may take a moment to become available.
+
+```typescript
+// Override defaults if needed
+await manager.start({ maxRetries: 5, baseDelayMs: 1000 });
+```
+
+<Callout type="info">
+Any partially-started resources (browser connections, spawned Lightpanda processes) are cleaned up automatically before each retry attempt.
+</Callout>

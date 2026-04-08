@@ -96,3 +96,90 @@ const config = createCrawlerRunConfig({
 | `pdf` | `boolean` | `false` | Capture page as PDF |
 | `captureNetworkRequests` | `boolean` | `false` | Log network requests |
 | `captureConsoleMessages` | `boolean` | `false` | Log console output |
+
+## Layered Configuration
+
+Feedstock supports a three-layer configuration system. Each layer overrides the one below it:
+
+1. **Programmatic overrides** — values passed to `createBrowserConfig()` / `createCrawlerRunConfig()`
+2. **Environment variables** — `FEEDSTOCK_*` vars
+3. **Project config file** — `feedstock.json` in your project root
+4. **Built-in defaults**
+
+### Project Config File
+
+Create a `feedstock.json` in your project root (or any ancestor directory). Feedstock walks up from `cwd` to find it.
+
+```json
+{
+  "browser": {
+    "browserType": "chromium",
+    "headless": true,
+    "stealth": true,
+    "verbose": false
+  },
+  "crawl": {
+    "pageTimeout": 30000,
+    "screenshot": false,
+    "generateMarkdown": true
+  }
+}
+```
+
+The file accepts two top-level keys: `browser` (partial `BrowserConfig`) and `crawl` (partial `CrawlerRunConfig`).
+
+### Environment Variables
+
+Set `FEEDSTOCK_*` environment variables to override project file settings. Useful for CI/CD and Docker deployments.
+
+| Variable | Type | Maps to |
+|----------|------|---------|
+| `FEEDSTOCK_BROWSER_TYPE` | `string` | `browser.browserType` |
+| `FEEDSTOCK_HEADLESS` | `"true" \| "false"` | `browser.headless` |
+| `FEEDSTOCK_USER_AGENT` | `string` | `browser.userAgent` |
+| `FEEDSTOCK_STEALTH` | `"true" \| "false"` | `browser.stealth` |
+| `FEEDSTOCK_VERBOSE` | `"true" \| "false"` | `browser.verbose` |
+| `FEEDSTOCK_TEXT_MODE` | `"true" \| "false"` | `browser.textMode` |
+| `FEEDSTOCK_CDP_URL` | `string` | `browser.backend` (sets `{ kind: "cdp", wsUrl }`) |
+| `FEEDSTOCK_PROXY` | `string` | `browser.proxy.server` |
+| `FEEDSTOCK_PROXY_USERNAME` | `string` | `browser.proxy.username` |
+| `FEEDSTOCK_PROXY_PASSWORD` | `string` | `browser.proxy.password` |
+| `FEEDSTOCK_PAGE_TIMEOUT` | `number` | `crawl.pageTimeout` |
+| `FEEDSTOCK_SCREENSHOT` | `"true" \| "false"` | `crawl.screenshot` |
+| `FEEDSTOCK_BLOCK_RESOURCES` | `"true" \| "false" \| profile name` | `crawl.blockResources` |
+| `FEEDSTOCK_GENERATE_MARKDOWN` | `"true" \| "false"` | `crawl.generateMarkdown` |
+
+<Callout type="info">
+Set `FEEDSTOCK_CDP_URL` in your environment and your code doesn't need to change between local development and CI — the layered config picks it up automatically.
+</Callout>
+
+### Using `loadConfig()`
+
+The `loadConfig()` function merges the project file and environment variable layers. Spread the result into your config creators to apply all layers:
+
+```typescript
+import {
+  loadConfig,
+  createBrowserConfig,
+  createCrawlerRunConfig,
+  WebCrawler,
+} from "feedstock";
+
+const layered = loadConfig();
+
+const browserConfig = createBrowserConfig({
+  ...layered.browser,
+  // Programmatic overrides (highest precedence)
+  headless: false,
+});
+
+const crawlConfig = createCrawlerRunConfig({
+  ...layered.crawl,
+  screenshot: true,
+});
+
+const crawler = new WebCrawler(browserConfig);
+const result = await crawler.crawl("https://example.com", crawlConfig);
+```
+
+`loadConfig()` accepts an optional `{ startDir }` to control where the project file search begins (defaults to `process.cwd()`).

@@ -1,0 +1,250 @@
+---
+title: Scrape a Protected E-Commerce Site
+description: Bypass bot detection with stealth mode, proxy rotation, retry logic, session persistence, and consent popup removal.
+---
+
+This guide walks through scraping a protected e-commerce site that uses bot detection, CAPTCHAs, cookie consent banners, and IP-based rate limiting.
+
+## The Goal
+
+Reliably extract product data from a site that blocks automated browsers. We will combine stealth mode, rotating proxies, retry logic, session persistence for logged-in scraping, and consent popup dismissal into a single working pipeline.
+
+## Step 1: Enable Stealth Mode
+
+Stealth mode patches common browser fingerprinting signals: it overrides `navigator.webdriver`, spoofs the Chrome runtime object, randomizes plugins, and sets realistic language headers.
+
+```typescript
+import { WebCrawler, createBrowserConfig } from "feedstock";
+
+const crawler = new WebCrawler({
+  config: createBrowserConfig({
+    stealth: true,
+    headless: true,
+  }),
+});
+```
+
+<Callout type="info">
+Stealth mode works by injecting init scripts before any page JavaScript runs. It is only effective with the Playwright backend -- the fetch engine does not execute JavaScript, so stealth patches have no effect there.
+</Callout>
+
+## Step 2: Configure Proxy Rotation
+
+Use `ProxyRotationStrategy` to round-robin through a pool of proxies. It tracks failures per proxy and automatically marks unhealthy ones, recovering them after a configurable interval.
+
+```typescript
+import { ProxyRotationStrategy } from "feedstock";
+
+const proxies = new ProxyRotationStrategy(
+  [
+    { server: "http://proxy-us.example.com:8080", username: "user", password: "pass" },
+    { server: "http://proxy-eu.example.com:8080", username: "user", password: "pass" },
+    { server: "http://proxy-ap.example.com:8080", username: "user", password: "pass" },
+  ],
+  {
+    maxFailures: 3,        // mark unhealthy after 3 consecutive failures
+    recoveryInterval: 60_000, // retry unhealthy proxy after 60 seconds
+  },
+);
+```
+
+Before each request, call `proxies.getProxy()` to get the next healthy proxy and pass it to a fresh crawler instance (since the proxy is set at browser launch):
+
+```typescript
+const proxy = proxies.getProxy();
+
+const crawler = new WebCrawler({
+  config: createBrowserConfig({
+    stealth: true,
+    proxy,
+  }),
+});
+```
+
+After each crawl, report the result so the rotation strategy can track health:
+
+```typescript
+const result = await crawler.crawl(url, config);
+proxies.reportResult(proxy, result.success);
+```
+
+## Step 3: Retry on Blocks
+
+The `withRetry` helper re-runs a crawl when the response looks like a block page. The `isBlocked` function checks for common indicators: HTTP 403/429/503 status codes combined with text like "access denied", "captcha", or "checking your browser".
+
+```typescript
+import { withRetry, isBlocked, CacheMode } from "feedstock";
+
+const { result, retries } = await withRetry(
+  () =>
+    crawler.crawl("https://store.example.com/products", {
+      cacheMode: CacheMode.Bypass,
+      simulateUser: true,
+    }),
+  (res) => isBlocked(res.html, res.statusCode ?? 0),
+  {
+    maxRetries: 3,
+    retryDelay: 2000, // doubles each attempt: 2s, 4s, 6s
+  },
+);
+
+if (retries > 0) {
+  console.log(`Succeeded after ${retries} retries`);
+}
+```
+
+<Callout type="warn">
+Setting `simulateUser: true` adds random mouse movements and scrolling before content is captured. This can help bypass behavioral fingerprinting but adds 300-800ms of overhead per page.
+</Callout>
+
+## Step 4: Persist Login Sessions
+
+For sites that require authentication, use the storage state utilities to save and restore cookies and localStorage between runs.
+
+First, log in once with a visible browser:
+
+```typescript
+import {
+  WebCrawler,
+  createBrowserConfig,
+  saveStorageState,
+  loadStorageState,
+  applyStorageState,
+} from "feedstock";
+
+// One-time login: run headful so you can interact
+const loginCrawler = new WebCrawler({
+  config: createBrowserConfig({ headless: false, stealth: true }),
+});
+
+// Navigate to login page -- after this, manually log in in the browser window
+await loginCrawler.crawl("https://store.example.com/login", {
+  waitFor: { kind: "selector", value: ".account-dashboard" },
+  sessionId: "login-session",
+});
+```
+
+The `saveStorageState` and `loadStorageState` functions persist cookies to `~/.feedstock/storage/state.json` by default. You can also provide a custom path:
+
+```typescript
+// Save after login
+await saveStorageState(browserContext, "./session/store-auth.json");
+
+// On subsequent runs, check for saved state
+const state = loadStorageState("./session/store-auth.json");
+if (state) {
+  await applyStorageState(browserContext, state);
+}
+```
+
+For automated login flows (no manual interaction), use the `jsCode` option:
+
+```typescript
+const result = await crawler.crawl("https://store.example.com/login", {
+  jsCode: `
+    document.querySelector('#email').value = 'user@example.com';
+    document.querySelector('#password').value = 'secret';
+    document.querySelector('form').submit();
+  `,
+  waitFor: { kind: "selector", value: ".account-dashboard" },
+  sessionId: "auth-session",
+});
+```
+
+## Step 5: Remove Consent Popups
+
+Set `removeConsentPopups: true` to automatically dismiss cookie consent banners and overlay dialogs before scraping content:
+
+```typescript
+const result = await crawler.crawl("https://store.example.com/products", {
+  removeConsentPopups: true,
+  removeOverlayElements: true,
+});
+```
+
+The `removeOverlayElements` option also strips fixed-position overlays (newsletter modals, interstitials) from the DOM before content extraction.
+
+## Full Working Example
+
+Putting it all together -- a complete script that scrapes product pages from a protected e-commerce site:
+
+```typescript
+import {
+  WebCrawler,
+  createBrowserConfig,
+  CacheMode,
+  ProxyRotationStrategy,
+  withRetry,
+  isBlocked,
+  loadStorageState,
+  applyStorageState,
+} from "feedstock";
+
+// -- Proxy pool --
+const proxies = new ProxyRotationStrategy([
+  { server: "http://proxy-us.example.com:8080", username: "u", password: "p" },
+  { server: "http://proxy-eu.example.com:8080", username: "u", password: "p" },
+]);
+
+// -- Product schema --
+const schema = {
+  name: "products",
+  baseSelector: ".product-card",
+  fields: [
+    { name: "title", selector: ".product-name", type: "text" as const },
+    { name: "price", selector: ".price", type: "text" as const },
+    { name: "image", selector: "img", type: "attribute" as const, attribute: "src" },
+  ],
+};
+
+// -- URLs to scrape --
+const urls = Array.from({ length: 10 }, (_, i) =>
+  `https://store.example.com/products?page=${i + 1}`
+);
+
+// -- Crawl each page --
+const allProducts = [];
+
+for (const url of urls) {
+  const proxy = proxies.getProxy();
+
+  const crawler = new WebCrawler({
+    config: createBrowserConfig({
+      stealth: true,
+      headless: true,
+      proxy,
+    }),
+  });
+
+  const { result, retries } = await withRetry(
+    () =>
+      crawler.crawl(url, {
+        cacheMode: CacheMode.Bypass,
+        simulateUser: true,
+        removeConsentPopups: true,
+        removeOverlayElements: true,
+        blockResources: "fast",
+        extractionStrategy: { type: "css", params: schema },
+        waitFor: { kind: "selector", value: ".product-card" },
+      }),
+    (res) => isBlocked(res.html, res.statusCode ?? 0),
+    { maxRetries: 3, retryDelay: 2000 },
+  );
+
+  proxies.reportResult(proxy, result.success && retries === 0);
+
+  if (result.extractedContent) {
+    const items = JSON.parse(result.extractedContent)
+      .map((item: { content: string }) => JSON.parse(item.content));
+    allProducts.push(...items);
+  }
+
+  await crawler.close();
+}
+
+console.log(`Extracted ${allProducts.length} products from ${urls.length} pages`);
+```
+
+<Callout type="info">
+For high-volume scraping, create one crawler per proxy rather than per URL. This avoids the overhead of launching a new browser for every page. Rotate which crawler handles each request using the proxy rotation strategy.
+</Callout>

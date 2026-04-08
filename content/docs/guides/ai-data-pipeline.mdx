@@ -1,0 +1,284 @@
+---
+title: Build an AI Data Pipeline
+description: Crawl pages and extract structured data for LLM consumption using accessibility snapshots, markdown, and change tracking.
+---
+
+This guide shows how to build a data pipeline that crawls web pages and produces clean, structured content ready for LLM ingestion. We cover accessibility snapshots with `@e` references, markdown generation, the accessibility extraction strategy, content hashing, and change tracking between runs.
+
+## The Goal
+
+Build a pipeline that:
+
+1. Crawls a set of pages and generates compact, semantic representations
+2. Extracts structured data (headings, links, interactive elements) with stable references
+3. Produces clean markdown suitable for RAG or fine-tuning
+4. Tracks changes between runs so you only reprocess what changed
+
+## Step 1: Generate Accessibility Snapshots
+
+Accessibility snapshots produce a compact, semantic tree of the page -- headings, links, buttons, inputs, and images -- that is orders of magnitude smaller than raw HTML. Each interactive or named element gets a stable `@e` reference (e.g., `@e1`, `@e2`).
+
+```typescript
+import { WebCrawler, CacheMode } from "feedstock";
+
+const crawler = new WebCrawler();
+
+const result = await crawler.crawl("https://example.com/docs/getting-started", {
+  snapshot: true,
+  generateMarkdown: true,
+  cacheMode: CacheMode.Bypass,
+});
+
+console.log(result.snapshot);
+```
+
+The snapshot output looks like this:
+
+```
+@e1 [heading] "Getting Started" [level=1]
+  @e2 [paragraph] "Welcome to the platform. Follow these steps to set up your account."
+  @e3 [heading] "Installation" [level=2]
+    @e4 [link] "Download the CLI" -> https://example.com/download
+    @e5 [textbox] "Search documentation"
+    @e6 [button] "Install"
+```
+
+Each `@e` reference uniquely identifies an element. These references are stable across crawls of the same page structure, making them useful as anchors for LLM tool use or agent interactions.
+
+<Callout type="info">
+The static snapshot builder (used by the fetch engine) extracts headings, links, buttons, inputs, and images using Cheerio. The CDP-based snapshot (used with the Playwright engine) captures the full accessibility tree from Chrome DevTools Protocol, which includes ARIA roles, states, and dynamically rendered content.
+</Callout>
+
+## Step 2: Use the Accessibility Extraction Strategy
+
+The accessibility extraction strategy flattens the snapshot tree into individual extracted items, each with metadata about its role, reference, and properties. This is ideal for building structured datasets.
+
+```typescript
+const result = await crawler.crawl("https://example.com/docs/api-reference", {
+  snapshot: true,
+  extractionStrategy: {
+    type: "accessibility",
+    params: {
+      roles: ["heading", "link"],
+      includeTreeText: true,
+    },
+  },
+});
+
+const items = JSON.parse(result.extractedContent!);
+
+for (const item of items) {
+  console.log(item);
+}
+// { index: 0, content: "@e1 [heading] \"API Reference\" [level=1]\n  ...", metadata: { type: "tree", nodeCount: 42 } }
+// { index: 1, content: "API Reference", metadata: { role: "heading", ref: "e1", level: 1 } }
+// { index: 2, content: "Authentication", metadata: { role: "heading", ref: "e3", level: 2 } }
+// { index: 3, content: "View API keys", metadata: { role: "link", ref: "e5", url: "/settings/keys" } }
+```
+
+The `roles` filter limits extraction to specific element types. Set `includeTreeText: true` to include the full rendered tree as the first item -- useful as context for an LLM.
+
+## Step 3: Generate Markdown for RAG
+
+For retrieval-augmented generation, clean markdown is often the best format. Feedstock's markdown generator produces multiple variants:
+
+```typescript
+const result = await crawler.crawl("https://example.com/docs/tutorial", {
+  generateMarkdown: true,
+});
+
+const md = result.markdown!;
+
+// Raw markdown -- clean conversion of the page content
+console.log(md.rawMarkdown);
+
+// Markdown with inline citations [1], [2], etc.
+console.log(md.markdownWithCitations);
+
+// Just the references section
+console.log(md.referencesMarkdown);
+```
+
+For a multi-page pipeline, combine markdown from many pages into a corpus:
+
+```typescript
+const urls = [
+  "https://example.com/docs/intro",
+  "https://example.com/docs/setup",
+  "https://example.com/docs/api",
+];
+
+const results = await crawler.crawlMany(urls, {
+  generateMarkdown: true,
+  blockResources: "minimal",
+});
+
+const corpus = results
+  .filter((r) => r.success && r.markdown)
+  .map((r) => ({
+    url: r.url,
+    title: (r.metadata?.title as string) ?? r.url,
+    content: r.markdown!.rawMarkdown,
+  }));
+
+await Bun.write("./corpus.json", JSON.stringify(corpus, null, 2));
+```
+
+## Step 4: Track Changes Between Runs
+
+The `ChangeTracker` compares crawl results against a previous snapshot stored in a local SQLite database. It categorizes every page as `new`, `changed`, `unchanged`, or `removed` using content hashes.
+
+```typescript
+import { ChangeTracker } from "feedstock";
+
+const tracker = new ChangeTracker({
+  config: {
+    includeDiffs: true,   // generate text diffs for changed pages
+    diffMarkdown: true,   // diff the markdown output, not raw HTML
+    maxDiffChunks: 50,
+  },
+});
+
+// Crawl pages
+const results = await crawler.crawlMany(urls, { generateMarkdown: true });
+
+// Compare against previous run
+const report = tracker.compare(results);
+
+console.log(report.summary);
+// { total: 3, new: 0, changed: 1, unchanged: 2, removed: 0 }
+
+for (const change of report.changes) {
+  if (change.status === "changed") {
+    console.log(`Changed: ${change.url}`);
+    console.log(`  +${change.diff?.additions} -${change.diff?.deletions} lines`);
+  }
+  if (change.status === "new") {
+    console.log(`New page: ${change.url}`);
+  }
+}
+```
+
+Each call to `tracker.compare()` creates a new snapshot. You can list and prune old snapshots:
+
+```typescript
+// List all snapshots
+const snapshots = tracker.listSnapshots();
+for (const snap of snapshots) {
+  console.log(`${snap.id}: ${snap.pageCount} pages at ${new Date(snap.createdAt)}`);
+}
+
+// Delete snapshots older than 7 days
+const deleted = tracker.pruneOlderThan(7 * 24 * 60 * 60 * 1000);
+console.log(`Pruned ${deleted} old snapshot rows`);
+
+tracker.close();
+```
+
+## Step 5: Content Hashing
+
+Feedstock provides a `contentHash` function that produces a SHA-256 hash of any content string. Use it to detect duplicates or build your own change detection:
+
+```typescript
+import { contentHash } from "feedstock";
+
+const result = await crawler.crawl("https://example.com/docs/faq");
+
+const hash = contentHash(result.cleanedHtml ?? result.html);
+console.log(hash); // "a3f2b8c1..."
+
+// Compare with a stored hash to detect changes
+if (hash !== previouslyStoredHash) {
+  console.log("Content has changed -- reprocess this page");
+}
+```
+
+## Full Working Example
+
+A complete AI data pipeline that crawls, extracts, tracks changes, and outputs only updated content:
+
+```typescript
+import {
+  WebCrawler,
+  CacheMode,
+  ChangeTracker,
+  contentHash,
+  DomainFilter,
+  ContentTypeFilter,
+  FilterChain,
+  RateLimiter,
+} from "feedstock";
+
+const SITE = "https://docs.example.com";
+
+// -- Setup --
+const crawler = new WebCrawler({ verbose: true });
+const tracker = new ChangeTracker({
+  config: { includeDiffs: true, diffMarkdown: true },
+});
+
+const filterChain = new FilterChain([
+  new DomainFilter({ allowed: [new URL(SITE).hostname] }),
+  new ContentTypeFilter(),
+]);
+
+const rateLimiter = new RateLimiter({ baseDelay: 200 });
+
+// -- Crawl --
+const results: import("feedstock").CrawlResult[] = [];
+
+for await (const result of crawler.deepCrawlStream(
+  SITE,
+  {
+    cacheMode: CacheMode.Enabled,
+    generateMarkdown: true,
+    snapshot: true,
+    extractionStrategy: {
+      type: "accessibility",
+      params: { roles: ["heading", "link"], includeTreeText: true },
+    },
+    blockResources: "minimal",
+  },
+  {
+    maxDepth: 4,
+    maxPages: 200,
+    concurrency: 10,
+    filterChain,
+    rateLimiter,
+  },
+)) {
+  results.push(result);
+}
+
+// -- Detect changes --
+const report = tracker.compare(results);
+
+console.log("Change summary:", report.summary);
+
+// -- Output only new and changed pages --
+const updatedPages = report.changes
+  .filter((c) => c.status === "new" || c.status === "changed")
+  .map((change) => {
+    const result = results.find((r) => r.url === change.url)!;
+    return {
+      url: result.url,
+      title: (result.metadata?.title as string) ?? result.url,
+      markdown: result.markdown?.rawMarkdown ?? "",
+      snapshot: result.snapshot,
+      extraction: result.extractedContent ? JSON.parse(result.extractedContent) : [],
+      hash: contentHash(result.cleanedHtml ?? result.html),
+      changeStatus: change.status,
+      diff: change.diff,
+    };
+  });
+
+await Bun.write("./updated-pages.json", JSON.stringify(updatedPages, null, 2));
+console.log(`${updatedPages.length} pages to reprocess out of ${results.length} total`);
+
+tracker.close();
+await crawler.close();
+```
+
+<Callout type="info">
+For production pipelines, schedule this script on a cron job. The combination of HTTP-level caching (`CacheMode.Enabled`) and change tracking means each incremental run only does real work for pages that actually changed.
+</Callout>
