@@ -177,7 +177,7 @@ tracker.close();
 
 ## Step 5: Content Hashing
 
-Feedstock provides a `contentHash` function that produces a SHA-256 hash of any content string. Use it to detect duplicates or build your own change detection:
+Feedstock provides a `contentHash` function that produces a fast non-cryptographic hash of any content string. Use it to detect duplicates or build your own change detection:
 
 ```typescript
 import { contentHash } from "feedstock";
