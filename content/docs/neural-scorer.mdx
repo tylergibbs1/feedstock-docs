@@ -1,0 +1,107 @@
+---
+title: Neural Quality Scorer
+description: Online-learning URL scorer using feature extraction and quality propagation.
+---
+
+The Neural Quality Scorer predicts page quality from URL structure, anchor text, and parent page context — without fetching the page. It learns online from observed crawl results, improving predictions as the crawl progresses. Inspired by [Neural Prioritisation for Web Crawling](https://arxiv.org/abs/2506.16146).
+
+## How It Works
+
+1. Extract features from a URL and its context (anchor text, parent URL)
+2. Score using a learned weight vector (dot product + sigmoid)
+3. Blend with parent page quality (quality propagation)
+4. After crawling, observe actual quality and update weights via gradient descent
+
+## Quick Start
+
+```typescript
+import { NeuralQualityScorer, computePageQuality, CompositeScorer } from "feedstock";
+
+const neural = new NeuralQualityScorer();
+
+// Score a URL before fetching
+const score = neural.score(url, depth, { anchorText: "API documentation", parentUrl });
+
+// After crawling, teach the model
+const result = await crawler.crawl(url);
+const quality = computePageQuality(result);
+neural.observe(url, quality, { anchorText, parentUrl });
+```
+
+## Features
+
+The scorer extracts three categories of features:
+
+### URL Structural Features
+- `url:path_depth` — number of path segments (normalized)
+- `url:has_extension` — ends in .html/.htm/.php
+- `url:query_params` — number of query parameters
+- `url:path_contains_{keyword}` — binary features for content patterns (article, post, blog, docs, wiki, news, product, category)
+
+### Anchor Text Features
+- `anchor:length` — text length (normalized)
+- `anchor:word_count` — number of words
+- `anchor:contains_{keyword}` — matches query keywords (when `context.query` is set)
+- `anchor:has_numbers` — contains digits
+- `anchor:is_navigational` — looks like "next", "previous", "home", etc.
+
+### Quality Propagation
+- `parent:quality` — observed quality of parent URL
+- `parent:same_domain` — whether URL is on the same domain as parent
+
+## Configuration
+
+```typescript
+const neural = new NeuralQualityScorer({
+  learningRate: 0.1,        // weight update rate (default: 0.1)
+  featureDecay: 0.95,       // decay for feature importance (default: 0.95)
+  propagationFactor: 0.3,   // parent quality influence (default: 0.3)
+  minObservations: 5,       // trust threshold (default: 5)
+});
+```
+
+## Quality Propagation
+
+Pages linked from high-quality pages are likely high-quality themselves. The scorer blends feature-based prediction with parent quality:
+
+```
+finalScore = (1 - propagationFactor) * featurePrediction + propagationFactor * parentQuality
+```
+
+Set `propagationFactor: 0` to disable propagation and rely purely on features.
+
+## Page Quality Computation
+
+`computePageQuality(result)` derives a 0-1 quality signal:
+
+| Signal | Weight |
+|--------|--------|
+| Text content length | 0.30 |
+| Has meaningful markdown | 0.20 |
+| Low link density | 0.15 |
+| Has extracted content | 0.15 |
+| HTTP success (200) | 0.10 |
+| Shallow depth | 0.10 |
+
+## Debugging
+
+```typescript
+const stats = neural.getStats();
+console.log(`Observations: ${stats.observations}`);
+console.log(`Avg quality: ${stats.avgQuality.toFixed(3)}`);
+
+for (const [feature, weight] of stats.featureWeights) {
+  console.log(`  ${feature}: ${weight.toFixed(4)}`);
+}
+```
+
+## With CompositeScorer
+
+Combine with static scorers for hybrid prioritization:
+
+```typescript
+const scorer = new CompositeScorer()
+  .add(neural)                                        // learned quality
+  .add(new KeywordRelevanceScorer(["docs"], 1.5))    // keyword boost
+  .add(new PathDepthScorer(10, 0.5));                // shallow preference
+```

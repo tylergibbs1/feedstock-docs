@@ -35,6 +35,18 @@ Stealth mode overrides:
 - Navigator plugins and languages
 - Permission query responses
 
+### Enhanced Stealth (Fingerprint Consistency)
+
+For sites with advanced bot detection, use consistent fingerprint profiles where all 17+ browser attributes agree. See [Fingerprint Consistency](/fingerprint-consistency).
+
+```typescript
+import { applyEnhancedStealth } from "feedstock";
+
+crawler.setHook("onPageCreated", async (page) => {
+  await applyEnhancedStealth(page); // generates a random consistent profile
+});
+```
+
 ## User Simulation
 
 Simulate human-like mouse movements and scrolling:

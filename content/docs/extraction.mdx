@@ -3,7 +3,7 @@ title: Extraction Strategies
 description: Extract structured data from crawled pages using CSS selectors or regex.
 ---
 
-Extraction strategies transform cleaned HTML into structured data. Feedstock ships with CSS selector and regex strategies, plus a base class for custom implementations.
+Extraction strategies transform cleaned HTML into structured data. Feedstock ships with CSS selector, regex, XPath, table, accessibility, and composite multi-strategy extractors, plus a base class for custom implementations.
 
 ## How It Works
 
@@ -36,6 +36,9 @@ const items = JSON.parse(result.extractedContent!);
   </Card>
   <Card title="Regex Extraction" href="/regex-extraction">
     Match patterns in HTML content. Best for extracting specific data formats.
+  </Card>
+  <Card title="Composite Extraction" href="/composite-extraction">
+    Auto-detect content types (prose, tables, code) and apply specialized extractors to each.
   </Card>
 </Cards>
 

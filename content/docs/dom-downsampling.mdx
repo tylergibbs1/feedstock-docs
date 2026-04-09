@@ -1,0 +1,71 @@
+---
+title: DOM Downsampling
+description: Reduce DOM size before extraction for faster processing.
+---
+
+DOM downsampling preprocesses HTML to dramatically reduce size while preserving semantic content. Inspired by the [D2Snap paper](https://arxiv.org/abs/2508.04412), it applies six processing passes to strip noise before the scraping/extraction pipeline.
+
+## Quick Start
+
+```typescript
+import { DomDownsampler } from "feedstock";
+
+const downsampler = new DomDownsampler();
+const cleanHtml = downsampler.downsample(rawHtml);
+// 30-85% smaller depending on page complexity
+```
+
+## What It Removes
+
+1. **Boilerplate tags** — `<script>`, `<style>`, `<noscript>`, `<svg>`, `<iframe>`, HTML comments
+2. **Non-semantic attributes** — `data-*`, `onclick`, tracking attributes. Keeps `href`, `src`, `alt`, `id`, `class`, `role`, `aria-label`
+3. **Single-child container chains** — `<div><div><div><p>text</p></div></div></div>` becomes `<p>text</p>`
+4. **Empty nodes** — elements with no text or meaningful children (preserves `<img>`, `<input>`, `<br>`, `<hr>`)
+5. **Excessive whitespace** — collapsed to single spaces
+6. **Long text nodes** — optional truncation for very long text blocks
+
+## Configuration
+
+```typescript
+import { createDomDownsamplingConfig, DomDownsampler } from "feedstock";
+
+const config = createDomDownsamplingConfig({
+  maxTextLength: 1000,       // truncate text nodes beyond this (0 = no truncation)
+  collapseContainers: true,  // collapse single-child chains (default: true)
+  removeEmptyNodes: true,    // remove empty elements (default: true)
+  preserveAttributes: [      // attributes to keep (has sensible defaults)
+    "href", "src", "alt", "title", "role", "aria-label",
+    "id", "class", "type", "name", "value", "action", "method",
+  ],
+});
+
+const downsampler = new DomDownsampler(config);
+```
+
+## With Crawler Config
+
+```typescript
+const result = await crawler.crawl("https://example.com", {
+  domDownsampling: {
+    enabled: true,
+    maxTextLength: 500,
+  },
+});
+```
+
+## Real-World Results
+
+| Page | Before | After | Reduction |
+|------|--------|-------|-----------|
+| Wikipedia article | 250 KB | 172 KB | **31%** |
+| Hacker News | 34 KB | 24 KB | **29%** |
+| Typical SPA (inline scripts/styles) | 2.7 KB | 0.4 KB | **84%** |
+
+Clean sites like Wikipedia see moderate reduction. Sites with inline scripts, tracking pixels, and style blocks see 80%+ reduction.
+
+## When to Use
+
+- Before feeding HTML to extraction strategies (reduces processing time)
+- Before markdown generation (cleaner output)
+- When crawling at scale (less memory per page)
+- Before LLM processing (fewer tokens)

@@ -1,0 +1,112 @@
+---
+title: Fingerprint Consistency
+description: Spatially-consistent browser fingerprint profiles for stealth crawling.
+---
+
+Anti-bot systems detect crawlers not by individual fingerprint values, but by **inconsistencies** between them. A UA claiming Chrome on Windows but WebGL reporting an Apple GPU is an instant flag. Feedstock's enhanced stealth generates profiles where all 17+ attributes agree. Based on [FP-Inconsistent](https://arxiv.org/abs/2406.07647).
+
+## The Problem
+
+Basic stealth overrides a few values independently:
+
+```typescript
+// Old approach: 3 naive overrides, many inconsistencies
+navigator.webdriver = false;
+navigator.plugins = [1, 2, 3, 4, 5]; // obviously fake
+navigator.languages = ['en-US', 'en'];
+// But: UA says Chrome 120, WebGL says Apple M1, platform says Linux... 🚩
+```
+
+## Enhanced Stealth
+
+```typescript
+import { applyEnhancedStealth } from "feedstock";
+
+// Auto-generates a random consistent profile
+crawler.setHook("onPageCreated", async (page) => {
+  await applyEnhancedStealth(page);
+});
+```
+
+Or with a specific platform:
+
+```typescript
+import { generateProfile, applyFingerprintProfile } from "feedstock";
+
+const profile = generateProfile("chrome-mac");
+
+crawler.setHook("onPageCreated", async (page) => {
+  await applyFingerprintProfile(page, profile);
+});
+```
+
+## Profile Presets
+
+### `chrome-windows`
+- Platform: `Win32`
+- UA: `Windows NT 10.0; Win64; x64`
+- WebGL: NVIDIA, AMD, or Intel (DirectX-based ANGLE)
+- Screen: 1920x1080, 2560x1440, 1366x768
+- Touch: 0 (desktop)
+
+### `chrome-mac`
+- Platform: `MacIntel`
+- UA: `Macintosh; Intel Mac OS X 10_15_7`
+- WebGL: Apple M1/M2 or Intel Iris
+- Screen: 1440x900, 2560x1600 (Retina, pixelRatio=2)
+- Touch: 0 (desktop)
+
+### `chrome-linux`
+- Platform: `Linux x86_64`
+- UA: `X11; Linux x86_64`
+- WebGL: NVIDIA or AMD (no Apple)
+- Screen: 1920x1080, 2560x1440
+
+## What Gets Overridden
+
+All 17+ attributes are set in a single `page.evaluate()` call for spatial consistency:
+
+| Category | Attributes |
+|----------|-----------|
+| Navigator | `userAgent`, `platform`, `vendor`, `appVersion`, `language`, `languages` |
+| Hardware | `hardwareConcurrency`, `deviceMemory`, `maxTouchPoints` |
+| Anti-detect | `webdriver` (false), `plugins` (realistic Chrome plugins) |
+| Screen | `width`, `height`, `colorDepth`, `pixelRatio` |
+| WebGL | `UNMASKED_VENDOR_WEBGL`, `UNMASKED_RENDERER_WEBGL` |
+| Canvas | Deterministic noise via seeded PRNG (temporal consistency) |
+
+## Consistency Guarantees
+
+The key insight: every attribute is **derived from the same base profile**, not randomly generated independently.
+
+- Windows profile → DirectX ANGLE renderer, Win32 platform, Windows UA
+- Mac profile → Apple/Intel GPU, MacIntel platform, Macintosh UA
+- Canvas noise uses a fixed seed per profile → same fingerprint across repeated checks (temporal consistency)
+
+## Config
+
+```typescript
+const crawler = new WebCrawler({
+  config: {
+    stealth: true,
+    fingerprintPreset: "chrome-mac",  // or "chrome-windows", "chrome-linux"
+  },
+});
+```
+
+When `fingerprintPreset` is set, the enhanced stealth profile is used instead of the basic stealth overrides.
+
+## Generating Profiles
+
+```typescript
+import { generateProfile, generateRandomProfile } from "feedstock";
+
+// Specific preset
+const macProfile = generateProfile("chrome-mac");
+console.log(macProfile.userAgent);    // "Mozilla/5.0 (Macintosh; ..."
+console.log(macProfile.webglVendor);  // "Google Inc. (Apple)"
+console.log(macProfile.platform);     // "MacIntel"
+
+// Random consistent profile
+const random = generateRandomProfile();
+```

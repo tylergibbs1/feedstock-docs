@@ -3,7 +3,7 @@ title: Deep Crawling
 description: Recursively crawl entire sites with BFS, DFS, or BestFirst strategies.
 ---
 
-Deep crawling follows links from a starting URL and recursively crawls discovered pages. Feedstock provides three traversal strategies.
+Deep crawling follows links from a starting URL and recursively crawls discovered pages. Feedstock provides five traversal strategies.
 
 ## Quick Start
 
@@ -65,6 +65,31 @@ const results = await crawler.deepCrawl(
   {},
   { maxDepth: 3, maxPages: 50, scorer },
 );
+```
+
+### Bandit (Online Learning)
+
+Uses UCB1 to learn which URL patterns yield valuable content during the crawl. See [Bandit Scorer](/bandit-scorer).
+
+```typescript
+import { BanditDeepCrawlStrategy } from "feedstock";
+
+const strategy = new BanditDeepCrawlStrategy();
+const results = await strategy.run("https://example.com", crawler, {}, config);
+```
+
+### Focused (RL/Q-Learning)
+
+Uses reinforcement learning to maximize on-topic page discovery. Learns which link groups lead to relevant content. See [Focused Crawling](/focused-crawling).
+
+```typescript
+import { FocusedDeepCrawlStrategy } from "feedstock";
+
+const strategy = new FocusedDeepCrawlStrategy({
+  topic: "machine learning",
+  topicKeywords: ["ml", "neural", "model", "training"],
+});
+const results = await strategy.run("https://example.com", crawler, {}, config);
 ```
 
 ## DeepCrawlConfig

@@ -73,6 +73,36 @@ new DomainAuthorityScorer(["example.com"], 1.5)
 - Subdomain of preferred: 0.8
 - Unknown domain: 0.3
 
+## Learning Scorers
+
+### BanditScorer
+
+UCB1-based online learning scorer. Groups URLs by structural pattern and learns which groups yield valuable content. See [Bandit Scorer](/bandit-scorer) for full documentation.
+
+```typescript
+import { BanditScorer } from "feedstock";
+
+const bandit = new BanditScorer({ explorationWeight: 1.41 });
+scorer.add(bandit);
+
+// After crawling, update with reward
+bandit.update(url, reward, { anchorText, parentUrl });
+```
+
+### NeuralQualityScorer
+
+Predicts page quality from URL features, anchor text, and parent quality — improving with each observation. See [Neural Quality Scorer](/neural-scorer) for full documentation.
+
+```typescript
+import { NeuralQualityScorer } from "feedstock";
+
+const neural = new NeuralQualityScorer({ propagationFactor: 0.3 });
+scorer.add(neural);
+
+// After crawling, teach the model
+neural.observe(url, quality, { anchorText, parentUrl });
+```
+
 ## Custom Scorers
 
 Extend `URLScorer`:

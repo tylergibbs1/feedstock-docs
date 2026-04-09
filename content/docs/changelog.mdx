@@ -3,6 +3,32 @@ title: Changelog
 description: Release history for feedstock
 ---
 
+## v0.5.0
+
+**Research-driven intelligence — 8 features from arxiv papers**
+
+### Crawl Intelligence
+- **Bandit URL frontier** — UCB1-based online learning scorer (`BanditScorer`) that groups URLs by structural pattern and learns which groups yield valuable content. `BanditDeepCrawlStrategy` handles the full learn-while-crawling loop. Based on [arxiv 2602.11874](https://arxiv.org/abs/2602.11874).
+- **Neural quality estimation** — `NeuralQualityScorer` predicts page quality from URL structure, anchor text, and parent context. Learns online via gradient descent, with quality propagation from parent pages. Based on [arxiv 2506.16146](https://arxiv.org/abs/2506.16146).
+- **Focused crawling with RL** — `FocusedDeepCrawlStrategy` uses Q-learning to maximize on-topic page discovery. Epsilon-greedy exploration with link group discretization. Based on [arxiv 2112.07620](https://arxiv.org/abs/2112.07620).
+
+### Content Processing
+- **DOM downsampling** — `DomDownsampler` strips boilerplate tags, filters attributes, collapses single-child containers, and removes empty nodes. 30-85% HTML size reduction before extraction. Based on [arxiv 2508.04412](https://arxiv.org/abs/2508.04412).
+- **Composite multi-strategy extraction** — `CompositeExtractionStrategy` detects content regions (prose, tables, code, lists, media) and dispatches each to a specialized extractor. New `ProseExtractionStrategy` and `CodeExtractionStrategy`. Based on [arxiv 2602.19548](https://arxiv.org/abs/2602.19548).
+
+### Cache & Freshness
+- **Multi-signal cache freshness** — `CacheFreshnessEvaluator` combines sitemap `lastmod`, HTTP headers (ETag, Last-Modified, Cache-Control), content hash, and time decay into a weighted staleness score. Three-tier recommendations: `use_cache`, `revalidate`, `refetch`. Built-in sitemap parser. Based on [arxiv 2502.02430](https://arxiv.org/abs/2502.02430).
+
+### Browser & Stealth
+- **Hydration-aware readiness** — `waitForHydration()` detects SPA frameworks (React, Vue, Next, Nuxt, Svelte, Angular) and waits for content stability instead of fixed timeouts. 90-100% wait time reduction on most sites. Based on [arxiv 2504.03884](https://arxiv.org/abs/2504.03884).
+- **Fingerprint consistency** — `applyEnhancedStealth()` generates spatially-consistent browser profiles where UA, platform, WebGL, screen, canvas, and hardware all agree. Three presets (chrome-windows, chrome-mac, chrome-linux). Based on [arxiv 2406.07647](https://arxiv.org/abs/2406.07647).
+
+### Testing
+- 173 new tests across 8 feature branches, all with zero regressions against existing 408-test suite.
+- Integration demos against real websites (Wikipedia, Hacker News, React.dev, Vue.js).
+
+---
+
 ## v0.3.0
 
 **Bun-native performance**

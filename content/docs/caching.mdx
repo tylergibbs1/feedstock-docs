@@ -74,6 +74,18 @@ cache.clear();
 cache.close();
 ```
 
+## Cache Freshness Evaluation
+
+Instead of simple TTL-based invalidation, Feedstock can combine multiple signals (sitemap, HTTP headers, content hash, time decay) to decide whether cached content is stale. See [Cache Freshness](/cache-freshness) for full documentation.
+
+```typescript
+import { CacheFreshnessEvaluator } from "feedstock";
+
+const evaluator = new CacheFreshnessEvaluator();
+const result = evaluator.evaluate(cachedEntry, signals);
+// result.recommendation: "use_cache" | "revalidate" | "refetch"
+```
+
 ## Storage
 
 The cache is stored at `~/.feedstock/cache.db` by default. It uses:

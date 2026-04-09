@@ -1,0 +1,109 @@
+---
+title: Bandit Scorer
+description: UCB1-based online learning for URL frontier prioritization.
+---
+
+The Bandit Scorer uses the [Upper Confidence Bound (UCB1)](https://arxiv.org/abs/2602.11874) algorithm to learn which types of URLs yield valuable content during a crawl. Unlike static scorers, it improves as it crawls.
+
+## How It Works
+
+1. URLs are grouped by structural pattern (e.g., `/blog/posts/123` and `/blog/posts/456` share group `/blog/posts/{id}`)
+2. Each group is a "bandit arm" with tracked rewards
+3. UCB1 balances exploration (trying new groups) vs exploitation (favoring high-reward groups)
+4. After each page crawl, the reward signal updates the group's statistics
+
+## Quick Start
+
+```typescript
+import { BanditScorer, computeReward, CompositeScorer } from "feedstock";
+
+const bandit = new BanditScorer();
+
+// Use with CompositeScorer for deep crawling
+const scorer = new CompositeScorer()
+  .add(bandit);
+
+// After crawling a page, update the bandit
+const result = await crawler.crawl(url);
+const reward = computeReward(result);
+bandit.update(url, reward, { anchorText, parentUrl });
+```
+
+## With BanditDeepCrawlStrategy
+
+The `BanditDeepCrawlStrategy` handles the update loop automatically:
+
+```typescript
+import { BanditDeepCrawlStrategy } from "feedstock";
+
+const strategy = new BanditDeepCrawlStrategy();
+
+const results = await strategy.run(
+  "https://example.com",
+  crawler,
+  { cacheMode: CacheMode.Bypass },
+  { maxDepth: 3, maxPages: 100, concurrency: 5 },
+);
+```
+
+The strategy:
+- Scores discovered URLs using UCB1
+- Crawls the highest-scored URL
+- Computes reward from the crawl result
+- Updates the bandit's group statistics
+- Re-scores the frontier with updated knowledge
+
+## URL Grouping
+
+URLs are grouped by structural pattern with IDs replaced by placeholders:
+
+| URL | Group |
+|-----|-------|
+| `/blog/posts/123` | `/blog/posts/{id}` |
+| `/blog/posts/456` | `/blog/posts/{id}` |
+| `/about` | `/about` |
+| `/users/abc123def` | `/users/{id}` |
+
+Numeric IDs, UUIDs, and hex hashes are all normalized to `{id}`.
+
+## Configuration
+
+```typescript
+import { createBanditConfig, BanditScorer } from "feedstock";
+
+const config = createBanditConfig({
+  explorationWeight: 1.41,  // UCB exploration parameter (default: sqrt(2))
+  rewardDecay: 0.95,        // exponential decay for older rewards
+  minSamples: 2,            // minimum pulls before UCB kicks in
+});
+
+const bandit = new BanditScorer(config);
+```
+
+## Reward Signal
+
+`computeReward(result)` derives a 0-1 reward from a `CrawlResult`:
+
+| Signal | Weight | What It Measures |
+|--------|--------|------------------|
+| Content length | 0.4 | Normalized text length (caps at 10K chars) |
+| Meaningful text | 0.3 | Has substantial content beyond boilerplate |
+| Extracted content | 0.2 | Extraction strategy produced results |
+| HTTP success | 0.1 | 200 status code |
+
+## Debugging
+
+```typescript
+const stats = bandit.getStats();
+// Map<string, { pulls: number, avgReward: number, ucb: number }>
+
+for (const [group, data] of stats) {
+  console.log(`${group}: ${data.pulls} pulls, avg=${data.avgReward.toFixed(2)}, ucb=${data.ucb.toFixed(2)}`);
+}
+```
+
+## When to Use
+
+- **Deep crawls** where you don't know upfront which URL patterns yield good content
+- **Exploratory crawling** of unfamiliar sites
+- Combining with other scorers in a `CompositeScorer` for hybrid prioritization

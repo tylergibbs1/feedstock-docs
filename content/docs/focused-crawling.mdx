@@ -1,0 +1,108 @@
+---
+title: Focused Crawling
+description: RL-guided crawling that maximizes on-topic page discovery.
+---
+
+Focused crawling uses reinforcement learning (Q-learning) to learn which link groups yield relevant content for a given topic. Instead of following all links equally, the agent learns to prefer link patterns that lead to on-topic pages. Based on the [TRES paper](https://arxiv.org/abs/2112.07620).
+
+## Quick Start
+
+```typescript
+import { FocusedDeepCrawlStrategy } from "feedstock";
+
+const strategy = new FocusedDeepCrawlStrategy({
+  topic: "machine learning research",
+  topicKeywords: ["machine", "learning", "neural", "model", "training", "dataset"],
+});
+
+const results = await strategy.run(
+  "https://example.com",
+  crawler,
+  { cacheMode: CacheMode.Bypass },
+  { maxDepth: 3, maxPages: 100, concurrency: 5 },
+);
+```
+
+## How It Works
+
+1. **Discover links** from each crawled page
+2. **Group links** by domain + path pattern (e.g., all `/blog/*` links in one group)
+3. **Agent selects** which group to explore (epsilon-greedy: explore vs exploit)
+4. **Crawl pages** from the selected group
+5. **Compute relevance** of the crawled page to the target topic
+6. **Update Q-values** so the agent learns which groups yield relevant content
+7. **Decay epsilon** — gradually shift from exploration to exploitation
+
+## Relevance Scoring
+
+`computeRelevance(result, config)` scores how relevant a page is to the target topic (0-1):
+
+| Signal | Weight | Description |
+|--------|--------|-------------|
+| Keyword density in content | 0.40 | Topic keywords in markdown/text |
+| Keyword density in headings | 0.20 | Keywords in titles and headings |
+| Keywords in URL | 0.15 | Path segments matching keywords |
+| Content length | 0.15 | Substantive content proxy |
+| HTTP success | 0.10 | 200 status code |
+
+## Configuration
+
+```typescript
+import { FocusedDeepCrawlStrategy } from "feedstock";
+
+const strategy = new FocusedDeepCrawlStrategy({
+  // Topic definition
+  topic: "web security vulnerabilities",
+  topicKeywords: ["xss", "injection", "csrf", "vulnerability", "exploit", "security"],
+  
+  // RL parameters
+  epsilon: 0.15,          // exploration rate (default: 0.15)
+  epsilonDecay: 0.995,    // decay per step (default: 0.995)
+  minEpsilon: 0.05,       // exploration floor (default: 0.05)
+  discountFactor: 0.9,    // future reward discount (default: 0.9)
+  learningRate: 0.2,      // Q-value update rate (default: 0.2)
+  maxActionGroups: 10,    // max link groups per page (default: 10)
+});
+```
+
+## Link Grouping
+
+Discovered links are grouped by domain and first path segment:
+
+| Link | Group |
+|------|-------|
+| `https://example.com/blog/post-1` | `same:blog` |
+| `https://example.com/blog/post-2` | `same:blog` |
+| `https://example.com/docs/api` | `same:docs` |
+| `https://other.com/research/paper` | `cross:research` |
+
+Groups with the fewest links are merged to respect `maxActionGroups`.
+
+## Q-Learning Agent
+
+The agent uses standard Q-learning with epsilon-greedy exploration:
+
+```
+Q(s, a) = Q(s, a) + α * (reward + γ * max Q(s', a') - Q(s, a))
+```
+
+**State** is discretized into bins across 6 dimensions:
+- Crawl depth, pages visited, average relevance, last relevance, frontier size, domain diversity
+
+**Actions** are link groups. The agent picks the group with the highest Q-value (with probability 1-ε) or a random group (with probability ε).
+
+## Debugging
+
+```typescript
+const agent = strategy.agent; // access the internal agent
+const stats = agent.getStats();
+console.log(`Q-table size: ${stats.qTableSize}`);
+console.log(`Current epsilon: ${stats.epsilon.toFixed(3)}`);
+console.log(`Total updates: ${stats.totalUpdates}`);
+```
+
+## When to Use
+
+- **Topic-specific crawling** — gathering pages about a specific subject from a large site
+- **Research data collection** — collecting academic papers, documentation, or domain-specific content
+- **Unfamiliar sites** — when you don't know the site structure upfront and want the crawler to learn what's relevant

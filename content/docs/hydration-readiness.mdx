@@ -1,0 +1,114 @@
+---
+title: Hydration-Aware Readiness
+description: Smart page readiness detection that replaces fixed wait timeouts.
+---
+
+Modern SPAs render content in priority tiers — main content first, then interactive elements, then analytics. Waiting for full hydration (`networkidle`) wastes time on content the crawler doesn't need. Hydration-aware readiness detects when the main content is stable, cutting wait times by 90%+. Based on [MRAH](https://arxiv.org/abs/2504.03884).
+
+## The Problem
+
+```typescript
+// Old approach: wait 3 seconds on every page
+await crawler.crawl(url, { waitAfterLoad: 3000 });
+
+// Even worse: wait for ALL network activity to stop
+await crawler.crawl(url, { navigationWaitUntil: "networkidle" });
+```
+
+Static sites need 0ms of extra wait. Even SPAs typically have content ready in 100-300ms. Fixed timeouts waste the difference.
+
+## Quick Start
+
+```typescript
+const result = await crawler.crawl("https://example.com", {
+  hydrationDetection: true,  // enable with defaults
+});
+```
+
+Or with custom config:
+
+```typescript
+const result = await crawler.crawl("https://example.com", {
+  hydrationDetection: {
+    contentSelectors: ["main", "article", "#content"],
+    minContentLength: 100,
+    maxWaitMs: 10000,
+    stabilityChecks: 3,
+  },
+});
+```
+
+## How It Works
+
+### 1. Framework Detection
+
+Automatically detects the SPA framework from HTML markers:
+
+| Framework | Markers |
+|-----------|---------|
+| React | `_reactRootContainer`, `data-reactroot` |
+| Next.js | `__NEXT_DATA__` |
+| Vue | `__VUE__` |
+| Nuxt | `__NUXT__`, `__nuxt` |
+| Svelte | `__svelte` |
+| Angular | `ng-version`, `[ng-app]` |
+
+**Static pages** (no framework markers) are ready immediately — no extra wait.
+
+### 2. Content Stability Polling
+
+For SPAs, a script runs in the browser that:
+1. Polls content selectors every 100ms
+2. Measures text content length
+3. Content is "stable" when length doesn't change for 3 consecutive checks (300ms)
+4. Ready when content is stable AND meets minimum length threshold
+
+### 3. Early Exit
+
+- **Static HTML** → ready immediately (0ms)
+- **SSR'd SPA** (content already present) → ready immediately
+- **Client-rendered SPA** → waits for content stability (typically 100-500ms)
+- **Timeout** → falls back after `maxWaitMs` (default 10s)
+
+## Programmatic API
+
+```typescript
+import { waitForHydration, detectFramework, isStaticPage, isContentReady } from "feedstock";
+
+// In a hook
+crawler.setHook("afterGoto", async (page) => {
+  const result = await waitForHydration(page, { maxWaitMs: 5000 });
+  console.log(`Ready in ${result.waitedMs}ms (${result.readyReason})`);
+  console.log(`Framework: ${result.detectedFramework}`);
+});
+
+// Static analysis (no browser needed)
+const html = await fetch(url).then(r => r.text());
+console.log(detectFramework(html));    // "next" | "react" | "vue" | null
+console.log(isStaticPage(html));       // true/false
+console.log(isContentReady(html, createHydrationConfig()));
+```
+
+## Configuration
+
+```typescript
+import { createHydrationConfig } from "feedstock";
+
+const config = createHydrationConfig({
+  contentSelectors: ["main", "article", "[role=main]", "#content", ".content"],
+  minContentLength: 100,       // min text chars to consider ready (default: 100)
+  maxWaitMs: 10000,            // absolute timeout (default: 10s)
+  pollIntervalMs: 100,         // check frequency (default: 100ms)
+  stabilityChecks: 3,          // consecutive stable polls needed (default: 3)
+  stabilityThresholdMs: 300,   // time content must be stable (default: 300ms)
+});
+```
+
+## Real-World Results
+
+| Site | Type | Framework | Old Wait | New Wait | Savings |
+|------|------|-----------|----------|----------|---------|
+| Wikipedia | Static | None | 3000ms | 0ms | **100%** |
+| Hacker News | Static | None | 3000ms | 0ms | **100%** |
+| React.dev | SPA | Next.js | 3000ms | 300ms | **90%** |
+| Vue.js docs | Static (SSG) | None | 3000ms | 0ms | **100%** |

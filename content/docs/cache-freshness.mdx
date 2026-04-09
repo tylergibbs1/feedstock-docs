@@ -1,0 +1,109 @@
+---
+title: Cache Freshness
+description: Multi-signal cache freshness evaluation using sitemap, HTTP headers, and content hashing.
+---
+
+Instead of naive TTL-based cache invalidation, Feedstock can combine multiple noisy signals to decide whether cached content is stale. Based on [Scalable Crawling with Noisy Change-Indicating Signals](https://arxiv.org/abs/2502.02430).
+
+## The Problem
+
+A simple TTL cache makes binary decisions: fresh if under 24 hours, stale if over. This misses cases like:
+- Page updated 6 hours after caching (sitemap says so) — TTL says "fresh" but it's stale
+- Page is 25 hours old but ETag confirms no change — TTL says "stale" but it's fresh
+
+## Multi-Signal Evaluation
+
+```typescript
+import { CacheFreshnessEvaluator } from "feedstock";
+
+const evaluator = new CacheFreshnessEvaluator();
+
+const result = evaluator.evaluate(
+  { url: "https://example.com", cachedAt: Date.now() - 3600_000, etag: '"abc"' },
+  {
+    cachedAt: Date.now() - 3600_000,
+    etag: '"abc"',           // same ETag — content unchanged
+    cachedEtag: '"abc"',
+    sitemapLastmod: new Date(Date.now() - 7200_000).toISOString(),
+    cacheControl: "max-age=7200",
+  },
+);
+
+console.log(result.isStale);         // false
+console.log(result.score);           // 0.18 (low = fresh)
+console.log(result.recommendation);  // "use_cache"
+```
+
+## Signals
+
+Four signal types are evaluated, each with configurable trust weight:
+
+### Time Decay
+How old is the cached entry? Staleness increases linearly with age.
+
+### HTTP Headers
+- **ETag**: If new ETag differs from cached → stale (confidence 0.95)
+- **Last-Modified**: If newer than cached → stale (confidence 0.8)
+- **Cache-Control**: If `max-age` expired → stale (confidence 0.9). If `no-cache` → stale (confidence 0.7)
+
+### Sitemap
+- **lastmod**: If newer than cache timestamp → stale (confidence 0.7)
+- **changefreq**: "always"/"hourly" biases toward stale. "never"/"yearly" biases toward fresh.
+
+### Content Hash
+Direct comparison of content hashes. Most reliable signal when available.
+
+## Recommendations
+
+Based on the combined staleness score:
+
+| Score | Recommendation | Action |
+|-------|---------------|--------|
+| < 0.3 | `use_cache` | Serve cached content directly |
+| 0.3 – 0.7 | `revalidate` | Send conditional GET (If-None-Match / If-Modified-Since) |
+| > 0.7 | `refetch` | Full re-crawl |
+
+## Configuration
+
+```typescript
+const evaluator = new CacheFreshnessEvaluator({
+  maxAgeMs: 86400_000,        // max age before forced refresh (default: 24h)
+  sitemapWeight: 0.6,         // trust weight for sitemap signals
+  httpHeaderWeight: 0.8,      // trust weight for HTTP headers
+  contentHashWeight: 1.0,     // trust weight for content hash
+  timeDecayWeight: 0.4,       // trust weight for time-based decay
+  staleThreshold: 0.5,        // score above which content is stale
+});
+```
+
+## Sitemap Parsing
+
+Built-in sitemap parser for fetching freshness signals:
+
+```typescript
+import { parseSitemap, fetchSitemap, buildSitemapIndex } from "feedstock";
+
+// Parse XML string
+const entries = parseSitemap(xml);
+// [{ loc: "https://...", lastmod: "2024-01-15", changefreq: "weekly", priority: 0.8 }]
+
+// Fetch from a site
+const entries = await fetchSitemap("https://example.com");
+
+// Build lookup for fast URL → entry access
+const index = buildSitemapIndex(entries);
+const entry = index.get("https://example.com/page");
+```
+
+## Inspecting Signals
+
+Every evaluation includes the individual signal breakdown:
+
+```typescript
+for (const signal of result.signals) {
+  console.log(`${signal.name}: stale=${signal.stale}, confidence=${signal.confidence}, reason=${signal.reason}`);
+}
+// time_decay: stale=false, confidence=0.52, reason="Cache age 3600s (4% of max)"
+// http_etag: stale=false, confidence=0.95, reason="ETag matches cached value"
+// sitemap_lastmod: stale=false, confidence=0.70, reason="Sitemap lastmod is before cache time"
+```

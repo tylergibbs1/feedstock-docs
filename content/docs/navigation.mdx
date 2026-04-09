@@ -57,6 +57,16 @@ await crawler.crawl(url, {
 });
 ```
 
+### Hydration-Aware Readiness
+
+For SPAs, consider using hydration detection instead of `networkidle`. It detects the SPA framework, waits for content stability, and exits early — typically 90%+ faster than `networkidle`. See [Hydration-Aware Readiness](/hydration-readiness).
+
+```typescript
+await crawler.crawl(url, {
+  hydrationDetection: true,
+});
+```
+
 ## With Deep Crawling
 
 ```typescript

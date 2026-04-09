@@ -1,0 +1,111 @@
+---
+title: Composite Extraction
+description: Compose specialized extractors per content type for richer results.
+---
+
+No single extractor works best for all content. Tables need table-aware extraction, code blocks need code-aware extraction, prose needs prose-aware extraction. The composite strategy detects content regions and dispatches each to the right extractor. Based on [Beyond a Single Extractor](https://arxiv.org/abs/2602.19548).
+
+## Quick Start
+
+```typescript
+import { createCompositeExtraction } from "feedstock";
+
+const strategy = createCompositeExtraction();
+const items = await strategy.extract(url, html);
+
+for (const item of items) {
+  console.log(`[${item.metadata?.contentType}] ${item.content.slice(0, 100)}`);
+}
+// [prose] Web crawlers are programs that systematically browse the World Wide Web...
+// [table] {"headers":["Engine","Language"],"rows":[["Googlebot","C++"],...]}
+// [code] function crawl(url) { ... }
+```
+
+## How It Works
+
+1. **Detect content regions** — scans the HTML for tables, code blocks, lists, media, forms, navigation, and prose
+2. **Filter** — removes navigation regions and low-confidence detections
+3. **Dispatch** — routes each region to its specialized extractor
+4. **Merge** — combines results in document order with content type metadata
+
+## Content Detection
+
+```typescript
+import { detectContentRegions } from "feedstock";
+
+const regions = detectContentRegions(html);
+for (const region of regions) {
+  console.log(`${region.type} (${region.confidence.toFixed(2)}): ${region.selector}`);
+}
+// prose (0.90): p:nth-of-type(1)
+// table (0.95): table.data-table
+// code (0.85): pre > code.language-python
+// list (0.80): ul.features
+```
+
+Detected types: `prose`, `table`, `code`, `list`, `media`, `form`, `navigation`.
+
+## Built-in Extractors
+
+### ProseExtractionStrategy
+
+Extracts headings, paragraphs, and blockquotes as clean text:
+
+```typescript
+import { ProseExtractionStrategy } from "feedstock";
+
+const strategy = new ProseExtractionStrategy();
+const items = await strategy.extract(url, html);
+// [{ content: "Introduction", metadata: { element: "h2", wordCount: 1, level: 2 } },
+//  { content: "Web crawlers are programs...", metadata: { element: "p", wordCount: 45 } }]
+```
+
+### CodeExtractionStrategy
+
+Extracts code blocks with language detection:
+
+```typescript
+import { CodeExtractionStrategy } from "feedstock";
+
+const strategy = new CodeExtractionStrategy();
+const items = await strategy.extract(url, html);
+// [{ content: "function crawl(url) { ... }", metadata: { language: "javascript", lineCount: 5 } }]
+```
+
+Detects language from class names: `language-python`, `hljs-javascript`, `lang-go`, etc.
+
+### TableExtractionStrategy
+
+Already built into Feedstock — extracts structured table data with headers, rows, and captions.
+
+## Configuration
+
+```typescript
+import { CompositeExtractionStrategy, CodeExtractionStrategy, ProseExtractionStrategy } from "feedstock";
+
+const strategy = new CompositeExtractionStrategy({
+  mappings: [
+    { contentType: "code", strategy: new CodeExtractionStrategy() },
+    { contentType: "prose", strategy: new ProseExtractionStrategy() },
+    { contentType: "table", strategy: new TableExtractionStrategy() },
+  ],
+  fallback: new NoExtractionStrategy(),
+  mergeStrategy: "interleave",    // "interleave" (document order) or "concatenate" (grouped by type)
+  includeNavigation: false,        // skip nav regions (default)
+  minConfidence: 0.3,              // skip low-confidence detections
+});
+```
+
+## Merge Strategies
+
+- **`interleave`** (default) — results appear in document order. A prose section followed by a table followed by code stays in that order.
+- **`concatenate`** — groups results by content type. All prose items first, then all tables, then all code.
+
+## Real-World Results
+
+On a Wikipedia article:
+
+| Approach | Items | Metadata |
+|----------|-------|----------|
+| Single extractor (`NoExtractionStrategy`) | 1 item | None |
+| Composite extraction | 79 items | Content type, word count, element type, confidence per item |
